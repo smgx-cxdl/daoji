@@ -12,6 +12,7 @@
     font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans CJK TC", "Microsoft JhengHei", sans-serif;
     padding-bottom: 25vh;
   }
+  body.dragging, body.dragging * { user-select: none; -webkit-user-select: none; }
   .sheet {
     max-width: 560px; margin: 16px auto; padding: 16px 12px 24px;
     background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.1);
@@ -33,6 +34,7 @@
   /* 表格 */
   .row {
     display: grid; grid-template-columns: 24px minmax(0, 1fr) 90px 90px 46px;
+    -webkit-touch-callout: none;
   }
   .row > * {
     min-height: 34px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid);
@@ -52,6 +54,16 @@
   .row input.dt { text-align: right; font-size: 12px; padding: 0 3px; }
   .row input:focus, .calc input:focus { background: #fff8e6; }
   .bad { background: #ffe3e3 !important; }
+  .rem {
+    color: var(--red); font-size: 15px; display: flex; align-items: center; justify-content: flex-end; padding: 0 6px;
+    cursor: pointer; user-select: none;
+  }
+
+  /* 长按拖动换顺序：被拖的那一行浮起来 */
+  .row.lift {
+    position: relative; z-index: 3; background: #fffbe8;
+    box-shadow: 0 4px 14px rgba(0,0,0,.28);
+  }
 
   /* 清空确认弹窗 */
   .mask {
@@ -67,10 +79,6 @@
     background: #fff; color: var(--ink); cursor: pointer; border-radius: 0;
   }
   .dlg-b .danger { background: var(--red); border-color: var(--red); color: #fff; }
-  .rem {
-    color: var(--red); font-size: 15px; display: flex; align-items: center; justify-content: flex-end; padding: 0 6px;
-    cursor: pointer; user-select: none;
-  }
 </style>
 </head>
 <body>
@@ -266,38 +274,161 @@
   };
 
   var box = document.getElementById("rows");
-  state.rows.forEach(function (r, i) {
-    var row = document.createElement("div");
-    row.className = "row";
+  function buildRows() {
+    box.innerHTML = "";
+    remEls = [];
+    inputs = [];
+    state.rows.forEach(function (r, i) {
+      var row = document.createElement("div");
+      row.className = "row";
+      row._r = r;
 
-    var rn = document.createElement("div");
-    rn.className = "rn"; rn.textContent = i + 1;
+      var rn = document.createElement("div");
+      rn.className = "rn"; rn.textContent = i + 1;
 
-    var tw = document.createElement("div");
-    var t = document.createElement("input");
-    t.type = "text"; t.maxLength = 60; t.value = r.text; t.autocomplete = "off";
-    t.addEventListener("input", function () { r.text = t.value; save(); });
-    tw.appendChild(t);
+      var tw = document.createElement("div");
+      var t = document.createElement("input");
+      t.type = "text"; t.maxLength = 60; t.value = r.text; t.autocomplete = "off";
+      t.addEventListener("input", function () { r.text = t.value; save(); });
+      tw.appendChild(t);
 
-    var fIn = dateInput(function () { return r.from; }, function (v) { r.from = v; }, function () {});
-    var fw = document.createElement("div");
-    fw.appendChild(fIn);
+      var fIn = dateInput(function () { return r.from; }, function (v) { r.from = v; }, function () {});
+      var fw = document.createElement("div");
+      fw.appendChild(fIn);
 
-    var oIn = dateInput(function () { return r.to; }, function (v) { r.to = v; }, function () { updateRem(i); });
-    var ow = document.createElement("div");
-    ow.appendChild(oIn);
+      var oIn = dateInput(function () { return r.to; }, function (v) { r.to = v; }, function () { updateRem(i); });
+      var ow = document.createElement("div");
+      ow.appendChild(oIn);
 
-    var rem = document.createElement("div");
-    rem.className = "rem";
-    remEls.push(rem);
+      var rem = document.createElement("div");
+      rem.className = "rem";
+      remEls.push(rem);
 
-    inputs[i] = { t: t, f: fIn, o: oIn };
-    rn.onclick = function () { askClear(i); };
-    rem.onclick = function () { askClear(i); };
+      inputs[i] = { t: t, f: fIn, o: oIn };
+      rn.onclick = function () { askClear(i); };
+      rem.onclick = function () { askClear(i); };
 
-    row.appendChild(rn); row.appendChild(tw); row.appendChild(fw); row.appendChild(ow); row.appendChild(rem);
-    box.appendChild(row);
+      row.appendChild(rn); row.appendChild(tw); row.appendChild(fw); row.appendChild(ow); row.appendChild(rem);
+      box.appendChild(row);
+    });
+  }
+  buildRows();
+
+  // ===== 长按任意一行，上下拖动换顺序 =====
+  var LONG = 400, SLOP = 8;
+  var press = null;          // 按下但还没满 0.4 秒
+  var drag = null;           // 正在拖动
+  var lastTouch = 0;         // 用来忽略触摸后补发的鼠标事件
+  var suppressUntil = 0;     // 拖动结束后短时间内不触发点击
+
+  function cancelPress() {
+    if (press) { clearTimeout(press.timer); press = null; }
+  }
+  function startPress(row, x, y) {
+    cancelPress();
+    press = {
+      row: row, x: x, y: y,
+      timer: setTimeout(function () { beginDrag(); }, LONG)
+    };
+  }
+  function beginDrag() {
+    if (!press) return;
+    var row = press.row;
+    var top = row.getBoundingClientRect().top;
+    drag = { row: row, grab: press.y - top, dy: 0 };
+    press = null;
+    try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
+    try { window.getSelection().removeAllRanges(); } catch (e) {}
+    document.body.classList.add("dragging");
+    row.classList.add("lift");
+    try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
+  }
+  function moveDrag(y) {
+    var row = drag.row, applied = drag.dy;
+    var h = row.offsetHeight;
+    var br = box.getBoundingClientRect();
+    var desired = Math.max(br.top - 6, Math.min(y - drag.grab, br.bottom - h + 6));
+    var nat = row.getBoundingClientRect().top - applied;
+    var dy = desired - nat;
+    for (var g = 0; g < 12; g++) {
+      var next = row.nextElementSibling, prev = row.previousElementSibling;
+      if (dy > h / 2 && next) box.insertBefore(row, next.nextSibling);
+      else if (dy < -h / 2 && prev) box.insertBefore(row, prev);
+      else break;
+      nat = row.getBoundingClientRect().top - applied;
+      dy = desired - nat;
+    }
+    drag.dy = dy;
+    row.style.transform = "translateY(" + dy + "px)";
+  }
+  function endDrag() {
+    var row = drag.row;
+    row.style.transform = "";
+    row.classList.remove("lift");
+    document.body.classList.remove("dragging");
+    drag = null;
+    suppressUntil = Date.now() + 500;
+    var order = [].map.call(box.children, function (el) { return el._r; });
+    var changed = order.some(function (r, i) { return r !== state.rows[i]; });
+    if (changed) {
+      state.rows = order;
+      save();
+      buildRows();
+      updateAllRem();
+    }
+  }
+
+  // 触摸（手机）
+  box.addEventListener("touchstart", function (e) {
+    lastTouch = Date.now();
+    if (e.touches.length !== 1) { cancelPress(); return; }
+    var row = e.target.closest ? e.target.closest(".row") : null;
+    if (!row) return;
+    var t = e.touches[0];
+    startPress(row, t.clientX, t.clientY);
+  }, { passive: true });
+  box.addEventListener("touchmove", function (e) {
+    lastTouch = Date.now();
+    var t = e.touches[0];
+    if (drag) { if (e.cancelable) e.preventDefault(); moveDrag(t.clientY); return; }
+    if (press && (Math.abs(t.clientX - press.x) > SLOP || Math.abs(t.clientY - press.y) > SLOP)) cancelPress();
+  }, { passive: false });
+  function endTouch(e) {
+    lastTouch = Date.now();
+    if (drag) {
+      if (e.cancelable) e.preventDefault();      // 不要再触发点击/弹出键盘
+      endDrag();
+    }
+    cancelPress();
+  }
+  box.addEventListener("touchend", endTouch);
+  box.addEventListener("touchcancel", endTouch);
+  box.addEventListener("contextmenu", function (e) {
+    if (drag || press) e.preventDefault();
   });
+
+  // 鼠标（电脑）
+  box.addEventListener("mousedown", function (e) {
+    if (Date.now() - lastTouch < 800 || e.button !== 0) return;
+    var row = e.target.closest ? e.target.closest(".row") : null;
+    if (!row) return;
+    startPress(row, e.clientX, e.clientY);
+  });
+  document.addEventListener("mousemove", function (e) {
+    if (Date.now() - lastTouch < 800) return;
+    if (drag) { e.preventDefault(); moveDrag(e.clientY); return; }
+    if (press && (Math.abs(e.clientX - press.x) > SLOP || Math.abs(e.clientY - press.y) > SLOP)) cancelPress();
+  });
+  document.addEventListener("mouseup", function () {
+    if (Date.now() - lastTouch < 800) return;
+    if (drag) endDrag();
+    cancelPress();
+  });
+
+  // 拖动刚结束时，吞掉紧跟着的那一下点击
+  box.addEventListener("click", function (e) {
+    if (Date.now() < suppressUntil) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
 
   showToday();
   updateCalc();
