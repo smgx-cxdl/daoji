@@ -39,7 +39,7 @@
     display: grid; grid-template-columns: 24px minmax(0, 1fr);
     -webkit-touch-callout: none;
   }
-  .body { display: grid; grid-template-columns: minmax(0, 1fr) 96px 96px 46px; }
+  .body { display: grid; grid-template-columns: minmax(0, 1fr) 92px 92px 40px 40px; }
   .body > * {
     min-height: 34px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid);
   }
@@ -54,7 +54,7 @@
     font-family: "Songti TC", "PMingLiU", "SimSun", serif; font-weight: bold; font-size: 14px;
   }
   .hd .body > div { display: flex; align-items: center; padding: 0 6px; white-space: nowrap; }
-  .hd .body > div:nth-child(2), .hd .body > div:nth-child(3), .hd .body > div:nth-child(4) { justify-content: center; padding: 0 2px; }
+  .hd .body > div:nth-child(2), .hd .body > div:nth-child(3), .hd .body > div:nth-child(4), .hd .body > div:nth-child(5) { justify-content: center; padding: 0 2px; }
 
   /* 序号由位置自动编号：固定不动，内容拖到哪个位置就是哪个序号 */
   #rows { counter-reset: rowno; }
@@ -62,9 +62,9 @@
   #rows .rn::before { content: counter(rowno); }
   .row input {
     width: 100%; height: 100%; min-height: 34px; border: none; background: transparent;
-    font: inherit; font-size: 15px; color: var(--ink); padding: 0 6px; border-radius: 0; outline: none;
+    font: inherit; font-size: 14px; color: var(--ink); padding: 0 6px; border-radius: 0; outline: none;
   }
-  .row input.dt { text-align: right; font-size: 11px; padding: 0 3px; }
+  .row input.dt { text-align: right; font-size: 10.5px; padding: 0 3px; }
   /* 平时输入框不接收触摸，由「点一下单元格」来聚焦它：
      这样长按时不会弹键盘、不会冒出光标和选字手柄，屏幕保持不变 */
   .row { -webkit-tap-highlight-color: transparent; }
@@ -73,8 +73,12 @@
   .row input:focus, .calc input:focus { background: #fff8e6; }
   .bad { background: #ffe3e3 !important; }
   .rem {
-    color: var(--red); font-size: 15px; display: flex; align-items: center; justify-content: flex-end; padding: 0 6px;
+    color: var(--red); font-size: 14px; display: flex; align-items: center; justify-content: flex-end; padding: 0 4px;
     cursor: pointer; user-select: none;
+  }
+  .ela {
+    color: var(--ink); font-size: 14px; display: flex; align-items: center; justify-content: flex-end; padding: 0 4px;
+    user-select: none;
   }
 
   /* 长按拖动换顺序：被拖的那一行浮起来 */
@@ -111,7 +115,7 @@
 
   <div class="row hd">
     <div class="rn"></div>
-    <div class="body"><div>事项</div><div>自</div><div>至</div><div>余天</div></div>
+    <div class="body"><div>事项</div><div>自</div><div>至</div><div>历时</div><div>余天</div></div>
   </div>
   <div id="rows"></div>
 </main>
@@ -261,8 +265,9 @@
 
   // ===== 表格 =====
   function updateRem(row) {
-    var to = row._r.to;
-    row._rem.textContent = to ? String(dayNum(to) - dayNum(todayIso())) : "";
+    var t = dayNum(todayIso()), r = row._r;
+    row._rem.textContent = r.to ? String(dayNum(r.to) - t) : "";        // 余天：至 − 今天
+    row._ela.textContent = r.from ? String(t - dayNum(r.from)) : "";    // 历时：今天 − 自（「自」在今天之后则为负数）
   }
   function updateAllRem() { [].forEach.call(box.children, updateRem); }
 
@@ -310,13 +315,17 @@
       t.addEventListener("input", function () { r.text = t.value; save(); });
       tw.appendChild(t);
 
-      var fIn = dateInput(function () { return r.from; }, function (v) { r.from = v; }, function () {});
+      var fIn = dateInput(function () { return r.from; }, function (v) { r.from = v; }, function () { updateRem(row); });
       var fw = document.createElement("div");
       fw.appendChild(fIn);
 
       var oIn = dateInput(function () { return r.to; }, function (v) { r.to = v; }, function () { updateRem(row); });
       var ow = document.createElement("div");
       ow.appendChild(oIn);
+
+      var ela = document.createElement("div");
+      ela.className = "ela";
+      row._ela = ela;
 
       var rem = document.createElement("div");
       rem.className = "rem";
@@ -326,7 +335,7 @@
 
       var body = document.createElement("div");
       body.className = "body";
-      body.appendChild(tw); body.appendChild(fw); body.appendChild(ow); body.appendChild(rem);
+      body.appendChild(tw); body.appendChild(fw); body.appendChild(ow); body.appendChild(ela); body.appendChild(rem);
       row._body = body;
 
       row.appendChild(rn); row.appendChild(body);
