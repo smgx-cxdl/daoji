@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日期计算</title>
+<style>
+  :root { --ink:#222; --grid:#dcdcdc; --muted:#888; --red:#e02020; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #f4f4f2; color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans CJK TC", "Microsoft JhengHei", sans-serif;
+    padding-bottom: 25vh;
+  }
+  .sheet {
+    max-width: 560px; margin: 16px auto; padding: 16px 12px 24px;
+    background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.1);
+  }
+  .today { font-size: 15px; margin: 4px 0 14px; }
+
+  /* 日期计算：日期 + 天数 = 日期 */
+  .calc { display: grid; grid-template-columns: 1fr 64px 1fr; gap: 8px; margin-bottom: 22px; }
+  .calc .lab { font-size: 13px; color: #444; margin-bottom: 4px; white-space: nowrap; }
+  .calc input, .calc .res {
+    width: 100%; height: 36px; border: 1px solid var(--grid); background: #fff;
+    font: inherit; font-size: 13px; color: var(--ink); padding: 0 6px; border-radius: 0; outline: none;
+    display: flex; align-items: center;
+  }
+  .calc input { text-align: right; }
+  .calc .res { justify-content: flex-end; }
+  .calc input:focus { background: #fff8e6; }
+
+  /* 表格 */
+  .row {
+    display: grid; grid-template-columns: 24px minmax(0, 1fr) 104px 104px 64px;
+  }
+  .row > * {
+    min-height: 34px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid);
+  }
+  .row > *:first-child { border-left: 1px solid var(--grid); }
+  .hd > * { border-top: 1px solid var(--grid); }
+  .hd {
+    font-family: "Songti TC", "PMingLiU", "SimSun", serif; font-weight: bold; font-size: 14px;
+  }
+  .hd > div { display: flex; align-items: center; padding: 0 6px; white-space: nowrap; }
+  .hd > div:nth-child(3), .hd > div:nth-child(4), .hd > div:nth-child(5) { justify-content: center; padding: 0 2px; }
+  .rn { color: var(--muted); font-size: 12px; text-align: right; padding: 10px 3px 0 0; }
+  .row input {
+    width: 100%; height: 100%; min-height: 34px; border: none; background: transparent;
+    font: inherit; font-size: 15px; color: var(--ink); padding: 0 6px; border-radius: 0; outline: none;
+  }
+  .row input.dt { text-align: right; font-size: 12px; padding: 0 5px; }
+  .row input:focus, .calc input:focus { background: #fff8e6; }
+  .bad { background: #ffe3e3 !important; }
+  .rem {
+    color: var(--red); font-size: 15px; display: flex; align-items: center; justify-content: flex-end; padding: 0 8px;
+  }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <div class="today" id="today"></div>
+
+  <div class="calc">
+    <div><div class="lab">日期计算</div><div id="calcBaseBox"></div></div>
+    <div><div class="lab">加（天）</div><div id="calcDaysBox"></div></div>
+    <div><div class="lab">等于</div><div class="res" id="calcRes"></div></div>
+  </div>
+
+  <div class="row hd">
+    <div></div><div>事项</div><div>自</div><div>至</div><div>剩余天数</div>
+  </div>
+  <div id="rows"></div>
+</main>
+
+<script>
+(function () {
+  var ROWS = 10, KEY = "tracker-v1";
+
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function iso(y, m, d) { return y + "-" + pad(m) + "-" + pad(d); }
+  function fmt(s) {
+    if (!s) return "";
+    var p = s.split("-");
+    return p[0] + "年" + (+p[1]) + "月" + (+p[2]) + "日";
+  }
+  function dayNum(s) {
+    var p = s.split("-");
+    return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000);
+  }
+  function todayIso() {
+    var n = new Date();
+    return iso(n.getFullYear(), n.getMonth() + 1, n.getDate());
+  }
+  function addDays(s, n) {
+    var p = s.split("-");
+    var dt = new Date(+p[0], +p[1] - 1, +p[2] + n);
+    return iso(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+  }
+  function validIso(y, m, d) {
+    var dt = new Date(y, m - 1, d);
+    return (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) ? iso(y, m, d) : null;
+  }
+
+  // 解析输入：空 → ""；认不出 → null
+  // 支持：20261126 / 261126 / 1126 / 926 / 26（本月26日）/ 11/26 / 2026-11-26 / 2026年11月26日
+  function parseDate(raw) {
+    var s = (raw || "").trim();
+    if (!s) return "";
+    var parts = s.match(/\d+/g);
+    if (!parts) return null;
+    var now = new Date(), y, m, d;
+    if (parts.length >= 3) {
+      y = +parts[0]; m = +parts[1]; d = +parts[2];
+      if (y < 100) y += 2000;
+    } else if (parts.length === 2) {
+      y = now.getFullYear(); m = +parts[0]; d = +parts[1];
+    } else {
+      var n = parts[0];
+      if (n.length === 8) { y = +n.slice(0, 4); m = +n.slice(4, 6); d = +n.slice(6, 8); }
+      else if (n.length === 6) { y = 2000 + (+n.slice(0, 2)); m = +n.slice(2, 4); d = +n.slice(4, 6); }
+      else if (n.length === 4) { y = now.getFullYear(); m = +n.slice(0, 2); d = +n.slice(2, 4); }
+      else if (n.length === 3) { y = now.getFullYear(); m = +n.slice(0, 1); d = +n.slice(1, 3); }
+      else if (n.length <= 2) { y = now.getFullYear(); m = now.getMonth() + 1; d = +n; }
+      else return null;
+    }
+    return validIso(y, m, d);
+  }
+
+  // ===== 数据 =====
+  var state = null;
+  try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; }
+  if (!state || typeof state !== "object") state = {};
+  var rowsData = [];
+  for (var i = 0; i < ROWS; i++) {
+    var o = (state.rows && state.rows[i]) || {};
+    rowsData.push({ text: o.text || "", from: o.from || "", to: o.to || "" });
+  }
+  var calc = state.calc || { base: todayIso(), days: "30" };
+  state = { rows: rowsData, calc: calc };
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+  // ===== 日期输入框：点一下全选，直接用数字键盘输入，离开后自动整理成「X年X月X日」=====
+  function dateInput(get, set, after) {
+    var el = document.createElement("input");
+    el.type = "text"; el.className = "dt"; el.autocomplete = "off";
+    el.setAttribute("inputmode", "numeric");
+    el.value = fmt(get());
+    el.addEventListener("focus", function () {
+      setTimeout(function () { try { el.select(); } catch (e) {} }, 0);
+    });
+    el.addEventListener("blur", function () {
+      var v = parseDate(el.value);
+      if (v === null) {                       // 认不出来：恢复原样并闪一下
+        el.value = fmt(get());
+        el.classList.add("bad");
+        setTimeout(function () { el.classList.remove("bad"); }, 700);
+        return;
+      }
+      set(v);
+      el.value = fmt(v);
+      save();
+      after();
+    });
+    el.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); el.blur(); }
+    });
+    return el;
+  }
+
+  // ===== 今日日期 =====
+  var todayEl = document.getElementById("today");
+  var lastToday = "";
+  function showToday() {
+    lastToday = todayIso();
+    todayEl.textContent = "今日日期：" + fmt(lastToday);
+  }
+
+  // ===== 日期计算：日期 + 天数 = 日期 =====
+  var resEl = document.getElementById("calcRes");
+  function updateCalc() {
+    var n = parseInt(state.calc.days, 10);
+    var b = state.calc.base;
+    resEl.textContent = (b && !isNaN(n)) ? fmt(addDays(b, n)) : "";
+  }
+  document.getElementById("calcBaseBox").appendChild(
+    dateInput(function () { return state.calc.base; }, function (v) { state.calc.base = v; }, updateCalc)
+  );
+  var daysEl = document.createElement("input");
+  daysEl.type = "text"; daysEl.autocomplete = "off"; daysEl.setAttribute("inputmode", "numeric");
+  daysEl.value = state.calc.days;
+  daysEl.addEventListener("focus", function () {
+    setTimeout(function () { try { daysEl.select(); } catch (e) {} }, 0);
+  });
+  daysEl.addEventListener("input", function () {
+    var v = daysEl.value.replace(/[^\d-]/g, "").replace(/(?!^)-/g, "").slice(0, 6);
+    daysEl.value = v;
+    state.calc.days = v;
+    save();
+    updateCalc();
+  });
+  daysEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); daysEl.blur(); }
+  });
+  document.getElementById("calcDaysBox").appendChild(daysEl);
+
+  // ===== 表格 =====
+  var remEls = [];
+  function updateRem(i) {
+    var to = state.rows[i].to;
+    remEls[i].textContent = to ? String(dayNum(to) - dayNum(todayIso())) : "";
+  }
+  function updateAllRem() { for (var i = 0; i < ROWS; i++) updateRem(i); }
+
+  var box = document.getElementById("rows");
+  state.rows.forEach(function (r, i) {
+    var row = document.createElement("div");
+    row.className = "row";
+
+    var rn = document.createElement("div");
+    rn.className = "rn"; rn.textContent = i + 1;
+
+    var tw = document.createElement("div");
+    var t = document.createElement("input");
+    t.type = "text"; t.maxLength = 60; t.value = r.text; t.autocomplete = "off";
+    t.addEventListener("input", function () { r.text = t.value; save(); });
+    tw.appendChild(t);
+
+    var fw = document.createElement("div");
+    fw.appendChild(dateInput(function () { return r.from; }, function (v) { r.from = v; }, function () {}));
+
+    var ow = document.createElement("div");
+    ow.appendChild(dateInput(function () { return r.to; }, function (v) { r.to = v; }, function () { updateRem(i); }));
+
+    var rem = document.createElement("div");
+    rem.className = "rem";
+    remEls.push(rem);
+
+    row.appendChild(rn); row.appendChild(tw); row.appendChild(fw); row.appendChild(ow); row.appendChild(rem);
+    box.appendChild(row);
+  });
+
+  showToday();
+  updateCalc();
+  updateAllRem();
+
+  // 跨天后自动刷新今日日期和剩余天数
+  function checkDay() {
+    if (todayIso() !== lastToday) { showToday(); updateAllRem(); }
+  }
+  setInterval(checkDay, 30000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) checkDay(); });
+})();
+</script>
+</body>
+</html>
