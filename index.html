@@ -83,7 +83,7 @@
   }
   .ela {
     color: var(--ink); font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0 2px;
-    user-select: none;
+    cursor: pointer; user-select: none;
   }
 
   /* 长按拖动换顺序：被拖的那一行浮起来 */
@@ -106,6 +106,7 @@
     background: #fff; color: var(--ink); cursor: pointer; border-radius: 0;
   }
   .dlg-b .danger { background: var(--red); border-color: var(--red); color: #fff; }
+  .dlg-b button.on { background: var(--ink); color: #fff; }
 </style>
 </head>
 <body>
@@ -124,6 +125,16 @@
   </div>
   <div id="rows"></div>
 </main>
+
+<div class="mask" id="maskEla" hidden>
+  <div class="dlg">
+    <div class="dlg-t" id="elaT"></div>
+    <div class="dlg-b">
+      <button type="button" id="elaShow">显示</button>
+      <button type="button" id="elaHide">不显示</button>
+    </div>
+  </div>
+</div>
 
 <div class="mask" id="mask" hidden>
   <div class="dlg">
@@ -196,7 +207,7 @@
   var rowsData = [];
   for (var i = 0; i < ROWS; i++) {
     var o = (state.rows && state.rows[i]) || {};
-    rowsData.push({ text: o.text || "", from: o.from || "", to: o.to || "" });
+    rowsData.push({ text: o.text || "", from: o.from || "", to: o.to || "", hide: !!o.hide });
   }
   var calc = state.calc || { base: todayIso(), days: "30" };
   state = { rows: rowsData, calc: calc };
@@ -272,7 +283,8 @@
   function updateRem(row) {
     var t = dayNum(todayIso()), r = row._r;
     row._rem.textContent = r.to ? String(dayNum(r.to) - t) : "";        // 余天：至 − 今天
-    row._ela.textContent = r.from ? String(t - dayNum(r.from)) : "";    // 历时：今天 − 自（「自」在今天之后则为负数）
+    // 历时：今天 − 自（「自」在今天之后则为负数）；这一行选了「不显示」时留空
+    row._ela.textContent = (r.from && !r.hide) ? String(t - dayNum(r.from)) : "";
   }
   function updateAllRem() { [].forEach.call(box.children, updateRem); }
 
@@ -295,13 +307,35 @@
     var row = pending;
     if (row) {
       var r = row._r;
-      r.text = ""; r.from = ""; r.to = "";
+      r.text = ""; r.from = ""; r.to = ""; r.hide = false;
       row._in.t.value = ""; row._in.f.value = ""; row._in.o.value = "";
       updateRem(row);
       save();
     }
     closeAsk();
   };
+
+  // ===== 点「历时」格子：选择显示 / 不显示（整行都没内容的行，点了没反应）=====
+  var maskEla = document.getElementById("maskEla");
+  var elaRow = null;
+  function askEla(row) {
+    var r = row._r;
+    if (!r.text && !r.from && !r.to) return;
+    elaRow = row;
+    var idx = [].indexOf.call(box.children, row);
+    document.getElementById("elaT").textContent = "第 " + (idx + 1) + " 项：历时一栏";
+    document.getElementById("elaShow").classList.toggle("on", !r.hide);
+    document.getElementById("elaHide").classList.toggle("on", !!r.hide);
+    maskEla.hidden = false;
+  }
+  function closeEla() { maskEla.hidden = true; elaRow = null; }
+  function setEla(hide) {
+    if (elaRow) { elaRow._r.hide = hide; updateRem(elaRow); save(); }
+    closeEla();
+  }
+  document.getElementById("elaShow").onclick = function () { setEla(false); };
+  document.getElementById("elaHide").onclick = function () { setEla(true); };
+  maskEla.onclick = function (e) { if (e.target === maskEla) closeEla(); };
 
   var box = document.getElementById("rows");
   function buildRows() {
@@ -331,6 +365,7 @@
       var ela = document.createElement("div");
       ela.className = "ela";
       row._ela = ela;
+      ela.onclick = function () { askEla(row); };
 
       var rem = document.createElement("div");
       rem.className = "rem";
