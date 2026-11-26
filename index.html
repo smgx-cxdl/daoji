@@ -17,7 +17,7 @@
     max-width: 560px; margin: 16px auto; padding: 16px 12px 24px;
     background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.1);
   }
-  .today { font-size: 21px; font-weight: bold; margin: 4px 0 16px; }
+  .today { font-size: 20px; font-weight: bold; margin: 4px 0 16px; }
 
   /* 日期计算：日期 + 天数 = 日期 */
   .calc { display: grid; grid-template-columns: 1fr 64px 1fr; gap: 8px; margin-bottom: 22px; }
@@ -44,7 +44,8 @@
   .rn {
     min-height: 34px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid);
     border-left: 1px solid var(--grid);
-    color: var(--muted); font-size: 12px; text-align: right; padding: 10px 3px 0 0; user-select: none;
+    color: var(--muted); font-size: 12px; user-select: none;
+    display: flex; align-items: center; justify-content: center; padding: 0;
   }
   .hd .rn, .hd .body > * { border-top: 1px solid var(--grid); }
   .hd {
@@ -218,7 +219,9 @@
   var lastToday = "";
   function showToday() {
     lastToday = todayIso();
-    todayEl.textContent = "今日日期：" + fmt(lastToday);
+    var p = lastToday.split("-");
+    var wd = ["日", "一", "二", "三", "四", "五", "六"][new Date(+p[0], +p[1] - 1, +p[2]).getDay()];
+    todayEl.textContent = "今日日期：" + fmt(lastToday) + "\u3000星期" + wd;
   }
 
   // ===== 日期计算：日期 + 天数 = 日期 =====
