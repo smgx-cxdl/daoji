@@ -54,10 +54,11 @@
     display: flex; align-items: center; justify-content: center; padding: 0;
   }
   .hd .rn, .hd .body > * { border-top: 1px solid var(--grid); }
-  .hd {
+  /* 表头的宋体粗体只设在文字格子上，不能设在 .body 上，否则按字体算出来的列宽会和下面的行不一样 */
+  .hd .body > div {
+    display: flex; align-items: center; padding: 0 6px; white-space: nowrap;
     font-family: "Songti TC", "PMingLiU", "SimSun", serif; font-weight: bold; font-size: 14px;
   }
-  .hd .body > div { display: flex; align-items: center; padding: 0 6px; white-space: nowrap; font-size: 14px; }
   .hd .body > div:nth-child(2), .hd .body > div:nth-child(3), .hd .body > div:nth-child(4), .hd .body > div:nth-child(5) { justify-content: center; padding: 0 2px; }
 
   /* 序号由位置自动编号：固定不动，内容拖到哪个位置就是哪个序号 */
