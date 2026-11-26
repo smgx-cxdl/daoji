@@ -65,6 +65,11 @@
     font: inherit; font-size: 15px; color: var(--ink); padding: 0 6px; border-radius: 0; outline: none;
   }
   .row input.dt { text-align: right; font-size: 12px; padding: 0 3px; }
+  /* 平时输入框不接收触摸，由「点一下单元格」来聚焦它：
+     这样长按时不会弹键盘、不会冒出光标和选字手柄，屏幕保持不变 */
+  .row { -webkit-tap-highlight-color: transparent; }
+  .row input { pointer-events: none; }
+  .row input:focus { pointer-events: auto; }
   .row input:focus, .calc input:focus { background: #fff8e6; }
   .bad { background: #ffe3e3 !important; }
   .rem {
@@ -255,35 +260,34 @@
   document.getElementById("calcDaysBox").appendChild(daysEl);
 
   // ===== 表格 =====
-  var remEls = [];
-  var inputs = [];
-  function updateRem(i) {
-    var to = state.rows[i].to;
-    remEls[i].textContent = to ? String(dayNum(to) - dayNum(todayIso())) : "";
+  function updateRem(row) {
+    var to = row._r.to;
+    row._rem.textContent = to ? String(dayNum(to) - dayNum(todayIso())) : "";
   }
-  function updateAllRem() { for (var i = 0; i < ROWS; i++) updateRem(i); }
+  function updateAllRem() { [].forEach.call(box.children, updateRem); }
 
   // ===== 点行号或「余天」数字：确认后清空这一行 =====
   var mask = document.getElementById("mask");
-  var pending = -1;
-  function askClear(i) {
-    var r = state.rows[i];
+  var pending = null;
+  function askClear(row) {
+    var r = row._r;
     if (!r.text && !r.from && !r.to) return;          // 本来就是空的，不弹窗
-    pending = i;
+    pending = row;
+    var idx = [].indexOf.call(box.children, row);
     var name = r.text ? "「" + (r.text.length > 12 ? r.text.slice(0, 12) + "…" : r.text) + "」" : "";
-    document.getElementById("dlgT").textContent = "是否清空第 " + (i + 1) + " 项" + name + "？";
+    document.getElementById("dlgT").textContent = "是否清空第 " + (idx + 1) + " 项" + name + "？";
     mask.hidden = false;
   }
-  function closeAsk() { mask.hidden = true; pending = -1; }
+  function closeAsk() { mask.hidden = true; pending = null; }
   document.getElementById("dlgNo").onclick = closeAsk;
   mask.onclick = function (e) { if (e.target === mask) closeAsk(); };
   document.getElementById("dlgYes").onclick = function () {
-    var i = pending;
-    if (i >= 0) {
-      var r = state.rows[i];
+    var row = pending;
+    if (row) {
+      var r = row._r;
       r.text = ""; r.from = ""; r.to = "";
-      inputs[i].t.value = ""; inputs[i].f.value = ""; inputs[i].o.value = "";
-      updateRem(i);
+      row._in.t.value = ""; row._in.f.value = ""; row._in.o.value = "";
+      updateRem(row);
       save();
     }
     closeAsk();
@@ -292,9 +296,7 @@
   var box = document.getElementById("rows");
   function buildRows() {
     box.innerHTML = "";
-    remEls = [];
-    inputs = [];
-    state.rows.forEach(function (r, i) {
+    state.rows.forEach(function (r) {
       var row = document.createElement("div");
       row.className = "row";
       row._r = r;
@@ -312,16 +314,15 @@
       var fw = document.createElement("div");
       fw.appendChild(fIn);
 
-      var oIn = dateInput(function () { return r.to; }, function (v) { r.to = v; }, function () { updateRem(i); });
+      var oIn = dateInput(function () { return r.to; }, function (v) { r.to = v; }, function () { updateRem(row); });
       var ow = document.createElement("div");
       ow.appendChild(oIn);
 
       var rem = document.createElement("div");
       rem.className = "rem";
-      remEls.push(rem);
-
-      inputs[i] = { t: t, f: fIn, o: oIn };
-      rem.onclick = function () { askClear(i); };
+      row._rem = rem;
+      row._in = { t: t, f: fIn, o: oIn };
+      rem.onclick = function () { askClear(row); };
 
       var body = document.createElement("div");
       body.className = "body";
@@ -357,8 +358,8 @@
     var top = row.getBoundingClientRect().top;
     drag = { row: row, body: row._body, grab: press.y - top, dy: 0 };
     press = null;
-    try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
-    try { window.getSelection().removeAllRanges(); } catch (e) {}
+    // 只有正在编辑的输入框就在被拖的这一行里时才收起键盘；否则键盘/光标保持原样
+    try { var ae = document.activeElement; if (ae && row.contains(ae)) ae.blur(); } catch (e) {}
     document.body.classList.add("dragging");
     row._body.classList.add("lift");
     try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
@@ -389,12 +390,7 @@
     suppressUntil = Date.now() + 500;
     var order = [].map.call(box.children, function (el) { return el._r; });
     var changed = order.some(function (r, i) { return r !== state.rows[i]; });
-    if (changed) {
-      state.rows = order;
-      save();
-      buildRows();
-      updateAllRem();
-    }
+    if (changed) { state.rows = order; save(); }       // 页面上已经是新顺序，不用重建，键盘/光标不受影响
   }
 
   // 触摸（手机）
@@ -402,7 +398,7 @@
     lastTouch = Date.now();
     if (e.touches.length !== 1) { cancelPress(); return; }
     var row = e.target.closest ? e.target.closest(".row") : null;
-    if (!row || (e.target.closest && e.target.closest(".rn"))) return;   // 序号列不参与拖动
+    if (!row || (e.target.closest && e.target.closest(".rn")) || e.target === document.activeElement) return;   // 序号列、正在编辑的输入框不参与拖动
     var t = e.touches[0];
     startPress(row, t.clientX, t.clientY);
   }, { passive: true });
@@ -430,7 +426,7 @@
   box.addEventListener("mousedown", function (e) {
     if (Date.now() - lastTouch < 800 || e.button !== 0) return;
     var row = e.target.closest ? e.target.closest(".row") : null;
-    if (!row || (e.target.closest && e.target.closest(".rn"))) return;
+    if (!row || (e.target.closest && e.target.closest(".rn")) || e.target === document.activeElement) return;
     startPress(row, e.clientX, e.clientY);
   });
   document.addEventListener("mousemove", function (e) {
@@ -448,6 +444,15 @@
   box.addEventListener("click", function (e) {
     if (Date.now() < suppressUntil) { e.stopPropagation(); e.preventDefault(); }
   }, true);
+
+  // 点一下单元格 → 聚焦里面的输入框（这时才弹出键盘）
+  box.addEventListener("click", function (e) {
+    var cell = e.target;
+    if (!cell || cell.tagName === "INPUT" || !cell.querySelector) return;
+    if (!cell.parentNode || !cell.parentNode.classList.contains("body")) return;
+    var inp = cell.querySelector("input");
+    if (inp) inp.focus();
+  });
 
   showToday();
   updateCalc();
