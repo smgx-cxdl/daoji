@@ -106,17 +106,27 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 #pB .sheet { max-width: 560px; margin: 16px auto; padding: 16px 12px 24px;
     background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.1); }
 #pB .today { font-size: 20px; font-weight: bold; margin: 4px 0 18px; }
-#pB .row { display: grid; grid-template-columns: 26px minmax(0, 1fr) 52px 50px 40px 40px 58px; }
-#pB .row > * { min-height: 36px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid); }
-#pB .row > *:first-child { border-left: 1px solid var(--grid); }
-#pB .hd > * { border-top: 1px solid var(--grid); }
-#pB .hd > div { display: flex; align-items: center; justify-content: center;
+/* 每行 = 固定的序号列 + 可拖动的内容部分(.body)，和第 1 页一样 */
+#pB .row { display: grid; grid-template-columns: 26px minmax(0, 1fr); -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent; }
+#pB .body { display: grid; grid-template-columns: minmax(0, 1fr) 52px 50px 40px 40px 58px; }
+#pB .body > *, #pB .rn { min-height: 36px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid); }
+#pB .rn { border-left: 1px solid var(--grid); display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 12px; user-select: none; }
+#pB .hd .rn, #pB .hd .body > * { border-top: 1px solid var(--grid); }
+#pB .hd .body > div { display: flex; align-items: center; justify-content: center;
     font-size: 13px; font-weight: bold; white-space: nowrap; padding: 0 1px; }
-#pB .hd > div small { font-size: 10px; font-weight: normal; margin-left: 1px; }
-#pB .hd > div.l { justify-content: flex-start; padding-left: 8px; }
-#pB .hd > div.sg { font-size: 18px; }
-#pB .rn { display: flex; align-items: center; justify-content: center;
-    color: var(--muted); font-size: 12px; cursor: pointer; user-select: none; }
+#pB .hd .body > div small { font-size: 10px; font-weight: normal; margin-left: 1px; }
+#pB .hd .body > div.l { justify-content: flex-start; padding-left: 8px; }
+#pB .hd .body > div.sg { font-size: 18px; }
+/* 序号由位置自动编号：固定不动，内容拖到哪个位置就是哪个序号 */
+#pB #b-rows { counter-reset: rowno; }
+#pB #b-rows .row { counter-increment: rowno; }
+#pB #b-rows .rn::before { content: counter(rowno); }
+/* 平时输入框不接收触摸，点一下格子才聚焦（这样长按时不会弹键盘） */
+#pB .row input { pointer-events: none; }
+#pB .row input:focus { pointer-events: auto; }
+#pB .body.lift { position: relative; z-index: 3; background: #fffbe8; box-shadow: 0 4px 14px rgba(0,0,0,.28); }
 #pB .row input { width: 100%; height: 100%; min-height: 36px; border: none; background: transparent;
     font: inherit; font-size: 15px; color: var(--ink); padding: 0 4px; border-radius: 0; outline: none;
     text-align: center; }
@@ -124,7 +134,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 #pB .row input:focus { background: #fff8e6; }
 #pB .row input.bad { background: #ffe3e3; }
 #pB .days { display: flex; align-items: center; justify-content: center;
-    font-size: 15px; color: var(--ink); }
+    font-size: 15px; color: var(--ink); cursor: pointer; user-select: none; }
 #pB .days.low { color: var(--red); }
 #pB .tools { margin-top: 16px; display: flex; justify-content: flex-end; }
 #pB .tools button[hidden] { display: none; }
@@ -188,13 +198,15 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   <div class="today" id="b-today"></div>
 
   <div class="row hd">
-    <div></div>
-    <div class="l">物品</div>
-    <div>库存<small>Pcs</small></div>
-    <div>日用量</div>
-    <div class="sg">+</div>
-    <div class="sg">-</div>
-    <div>可供天数</div>
+    <div class="rn"></div>
+    <div class="body">
+      <div class="l">物品</div>
+      <div>库存<small>Pcs</small></div>
+      <div>日用量</div>
+      <div class="sg">+</div>
+      <div class="sg">-</div>
+      <div>可供天数</div>
+    </div>
   </div>
   <div id="b-rows"></div>
 
@@ -646,6 +658,9 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     el.classList.toggle("low", d <= LOW);
   }
 
+  var box = document.getElementById("b-rows");
+  function idxOf(row) { return [].indexOf.call(box.children, row); }
+
   // ===== 撤销上一次 +/- =====
   var undoBtn = document.getElementById("b-undo");
   function showUndo() {
@@ -657,33 +672,33 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   undoBtn.onclick = function () {
     var u = state.undo;
     if (!u) return;
-    var r = state.rows[u.i], c = cells[u.i];
+    var row = box.children[u.i], r = state.rows[u.i];
     r.stock = u.prev;
-    c.stock.value = r.stock;
-    refresh(c.days, r);
+    row._c.stock.value = r.stock;
+    refresh(row._c.days, r);
     state.undo = null;
     save();
     showUndo();
   };
 
-  // ===== 清空一行：点序号，确认后清空 =====
+  // ===== 点「可供天数」格子：确认后清空这一项 =====
   var mask = document.getElementById("b-mask");
-  var pending = -1;
-  function askClear(i) {
-    var r = state.rows[i];
-    if (!r.name && !r.stock && !r.use) return;
-    pending = i;
+  var pending = null;
+  function askClear(row) {
+    var r = row._r;
+    if (!r.name && !r.stock && !r.use) return;          // 整行都没内容，点了没反应
+    pending = row;
     var nm = r.name ? "「" + (r.name.length > 12 ? r.name.slice(0, 12) + "…" : r.name) + "」" : "";
-    document.getElementById("b-dlgT").textContent = "是否清空第 " + (i + 1) + " 项" + nm + "？";
+    document.getElementById("b-dlgT").textContent = "是否清空第 " + (idxOf(row) + 1) + " 项" + nm + "？";
     mask.hidden = false;
   }
-  function closeAsk() { mask.hidden = true; pending = -1; }
+  function closeAsk() { mask.hidden = true; pending = null; }
   document.getElementById("b-dlgNo").onclick = closeAsk;
   mask.onclick = function (e) { if (e.target === mask) closeAsk(); };
   document.getElementById("b-dlgYes").onclick = function () {
-    var i = pending;
-    if (i >= 0) {
-      var r = state.rows[i], c = cells[i];
+    var row = pending;
+    if (row) {
+      var r = row._r, c = row._c, i = idxOf(row);
       r.name = ""; r.stock = ""; r.use = "";
       c.name.value = ""; c.stock.value = ""; c.use.value = ""; c.plus.value = ""; c.minus.value = "";
       refresh(c.days, r);
@@ -694,9 +709,6 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   };
 
   // ===== 表格 =====
-  var box = document.getElementById("b-rows");
-  var cells = [];
-
   function numInput(cls, mode) {
     var el = document.createElement("input");
     el.type = "text"; el.autocomplete = "off"; el.className = cls || "";
@@ -710,13 +722,13 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     return el;
   }
 
-  state.rows.forEach(function (r, i) {
+  state.rows.forEach(function (r) {
     var row = document.createElement("div");
     row.className = "row";
+    row._r = r;
 
     var rn = document.createElement("div");
-    rn.className = "rn"; rn.textContent = i + 1;
-    rn.onclick = function () { askClear(i); };
+    rn.className = "rn";
 
     var nm = document.createElement("input");
     nm.type = "text"; nm.className = "nm"; nm.maxLength = 30; nm.autocomplete = "off"; nm.value = r.name;
@@ -725,6 +737,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 
     var days = document.createElement("div");
     days.className = "days";
+    days.onclick = function () { askClear(row); };
 
     var st = numInput("", "decimal");
     st.value = r.stock;
@@ -759,7 +772,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
         r.stock = String(next);
         st.value = r.stock;
         el.value = "";
-        state.undo = { i: i, prev: prevStr, delta: (sign < 0 ? "−" : "+") + Math.abs(parseFloat(raw)) };
+        state.undo = { i: idxOf(row), prev: prevStr, delta: (sign < 0 ? "−" : "+") + Math.abs(parseFloat(raw)) };
         save();
         refresh(days, r);
         showUndo();
@@ -768,12 +781,139 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     }
     var plus = adjuster(1), minus = adjuster(-1);
 
-    cells[i] = { name: nm, stock: st, use: us, plus: plus, minus: minus, days: days };
     function wrap(el) { var d = document.createElement("div"); d.appendChild(el); return d; }   // 边框画在外层格子上
-    row.appendChild(rn); row.appendChild(wrap(nm)); row.appendChild(wrap(st)); row.appendChild(wrap(us)); row.appendChild(wrap(plus)); row.appendChild(wrap(minus)); row.appendChild(days);
+    var body = document.createElement("div");
+    body.className = "body";
+    body.appendChild(wrap(nm)); body.appendChild(wrap(st)); body.appendChild(wrap(us));
+    body.appendChild(wrap(plus)); body.appendChild(wrap(minus)); body.appendChild(days);
+    row._body = body;
+    row._c = { name: nm, stock: st, use: us, plus: plus, minus: minus, days: days };
+
+    row.appendChild(rn); row.appendChild(body);
     box.appendChild(row);
     refresh(days, r);
   });
+
+  // ===== 长按任意一行（序号除外），上下拖动换顺序 =====
+  var LONG = 400, SLOP = 8;
+  var press = null;          // 按下但还没满 0.4 秒
+  var drag = null;           // 正在拖动
+  var lastTouch = 0;         // 用来忽略触摸后补发的鼠标事件
+  var suppressUntil = 0;     // 拖动结束后短时间内不触发点击
+
+  function cancelPress() {
+    if (press) { clearTimeout(press.timer); press = null; }
+  }
+  function startPress(row, x, y) {
+    cancelPress();
+    press = { row: row, x: x, y: y, timer: setTimeout(function () { beginDrag(); }, LONG) };
+  }
+  function beginDrag() {
+    if (!press) return;
+    var row = press.row;
+    var top = row.getBoundingClientRect().top;
+    drag = { row: row, body: row._body, grab: press.y - top, dy: 0 };
+    press = null;
+    try { var ae = document.activeElement; if (ae && row.contains(ae)) ae.blur(); } catch (e) {}
+    document.body.classList.add("dragging");
+    row._body.classList.add("lift");
+    try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
+  }
+  // 只移动内容部分(.body)；序号列留在原位，序号按位置自动编号
+  function moveDrag(y) {
+    var row = drag.row;
+    var h = row.offsetHeight;
+    var br = box.getBoundingClientRect();
+    var desired = Math.max(br.top - 6, Math.min(y - drag.grab, br.bottom - h + 6));
+    var dy = desired - row.getBoundingClientRect().top;
+    for (var g = 0; g < 12; g++) {
+      var next = row.nextElementSibling, prev = row.previousElementSibling;
+      if (dy > h / 2 && next) box.insertBefore(row, next.nextSibling);
+      else if (dy < -h / 2 && prev) box.insertBefore(row, prev);
+      else break;
+      dy = desired - row.getBoundingClientRect().top;
+    }
+    drag.dy = dy;
+    drag.body.style.transform = "translateY(" + dy + "px)";
+  }
+  function endDrag() {
+    var row = drag.row;
+    row._body.style.transform = "";
+    row._body.classList.remove("lift");
+    document.body.classList.remove("dragging");
+    drag = null;
+    suppressUntil = Date.now() + 500;
+    var order = [].map.call(box.children, function (el) { return el._r; });
+    var changed = order.some(function (r, i) { return r !== state.rows[i]; });
+    if (changed) {
+      state.rows = order;
+      state.undo = null;      // 顺序变了，「撤销上次增减」里记的第几项就对不上了，所以一起收掉
+      showUndo();
+      save();
+    }
+  }
+
+  // 触摸（手机）
+  box.addEventListener("touchstart", function (e) {
+    lastTouch = Date.now();
+    if (e.touches.length !== 1) { cancelPress(); return; }
+    var row = e.target.closest ? e.target.closest(".row") : null;
+    if (!row || (e.target.closest && e.target.closest(".rn")) || e.target === document.activeElement) return;
+    var t = e.touches[0];
+    startPress(row, t.clientX, t.clientY);
+  }, { passive: true });
+  box.addEventListener("touchmove", function (e) {
+    lastTouch = Date.now();
+    var t = e.touches[0];
+    if (drag) { if (e.cancelable) e.preventDefault(); moveDrag(t.clientY); return; }
+    if (press && (Math.abs(t.clientX - press.x) > SLOP || Math.abs(t.clientY - press.y) > SLOP)) cancelPress();
+  }, { passive: false });
+  function endTouch(e) {
+    lastTouch = Date.now();
+    if (drag) {
+      if (e.cancelable) e.preventDefault();      // 不要再触发点击/弹出键盘
+      endDrag();
+    }
+    cancelPress();
+  }
+  box.addEventListener("touchend", endTouch);
+  box.addEventListener("touchcancel", endTouch);
+  box.addEventListener("contextmenu", function (e) {
+    if (drag || press) e.preventDefault();
+  });
+
+  // 鼠标（电脑）
+  box.addEventListener("mousedown", function (e) {
+    if (Date.now() - lastTouch < 800 || e.button !== 0) return;
+    var row = e.target.closest ? e.target.closest(".row") : null;
+    if (!row || (e.target.closest && e.target.closest(".rn")) || e.target === document.activeElement) return;
+    startPress(row, e.clientX, e.clientY);
+  });
+  document.addEventListener("mousemove", function (e) {
+    if (Date.now() - lastTouch < 800) return;
+    if (drag) { e.preventDefault(); moveDrag(e.clientY); return; }
+    if (press && (Math.abs(e.clientX - press.x) > SLOP || Math.abs(e.clientY - press.y) > SLOP)) cancelPress();
+  });
+  document.addEventListener("mouseup", function () {
+    if (Date.now() - lastTouch < 800) return;
+    if (drag) endDrag();
+    cancelPress();
+  });
+
+  // 拖动刚结束时，吞掉紧跟着的那一下点击
+  box.addEventListener("click", function (e) {
+    if (Date.now() < suppressUntil) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  // 点一下单元格 → 聚焦里面的输入框（这时才弹出键盘）
+  box.addEventListener("click", function (e) {
+    var cell = e.target;
+    if (!cell || cell.tagName === "INPUT" || !cell.querySelector) return;
+    if (!cell.parentNode || !cell.parentNode.classList.contains("body")) return;
+    var inp = cell.querySelector("input");
+    if (inp) inp.focus();
+  });
+
   showUndo();
 })();
 
