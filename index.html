@@ -54,19 +54,10 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 #pA .sheet { max-width: 560px; margin: 16px auto; padding: 16px 12px 24px;
     background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.1); }
 #pA .today { font-size: 20px; font-weight: bold; margin: 4px 0 16px; }
-#pA .calc { display: grid; grid-template-columns: 1fr 64px 1fr; gap: 8px; margin-bottom: 22px; }
-#pA .calc .lab { font-size: 13px; color: #444; margin-bottom: 4px; white-space: nowrap; }
-#pA .calc input,
-#pA .calc .res { width: 100%; height: 36px; border: 1px solid var(--grid); background: #fff;
-    font: inherit; font-size: 13px; color: var(--ink); padding: 0 6px; border-radius: 0; outline: none;
-    display: flex; align-items: center; }
-#pA .calc input { text-align: right; }
-#pA .calc .res { justify-content: flex-end; }
-#pA .calc input:focus { background: #fff8e6; }
 #pA .row { display: grid; grid-template-columns: 24px minmax(0, 1fr);
     -webkit-touch-callout: none; }
 #pA .body { display: grid; font-size: 10.5px;
-    grid-template-columns: minmax(0, 1fr) calc(8ch + 3em + 14px) calc(8ch + 3em + 14px) 3.9em 3.9em; }
+    grid-template-columns: minmax(0, 1fr) calc(8ch + 3em + 14px) 3.9em calc(8ch + 3em + 14px) 3.9em; }
 #pA .body > * { min-height: 34px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid); }
 #pA .rn { min-height: 34px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid);
     border-left: 1px solid var(--grid);
@@ -86,16 +77,13 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 #pA .row input { width: 100%; height: 100%; min-height: 34px; border: none; background: transparent;
     font: inherit; font-size: 14px; color: var(--ink); padding: 0 6px; border-radius: 0; outline: none; }
 #pA .row input.dt { text-align: right; font-size: 1em; padding: 0 3px; }
+#pA .row input.term { text-align: center; padding: 0 3px; }
 #pA .row { -webkit-tap-highlight-color: transparent; }
 #pA .row input { pointer-events: none; }
-#pA .row input:focus { pointer-events: auto; }
-#pA .row input:focus,
-#pA .calc input:focus { background: #fff8e6; }
+#pA .row input:focus { pointer-events: auto; background: #fff8e6; }
 #pA .bad { background: #ffe3e3 !important; }
 #pA .rem.low { color: var(--red); }
 #pA .rem { color: var(--ink); font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0 2px;
-    cursor: pointer; user-select: none; }
-#pA .ela { color: var(--ink); font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0 2px;
     cursor: pointer; user-select: none; }
 #pA .body.lift { position: relative; z-index: 3; background: #fffbe8;
     box-shadow: 0 4px 14px rgba(0,0,0,.28); }
@@ -136,7 +124,6 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 #pA .dlg-b button { font: inherit; font-size: 15px; padding: 8px 22px; border: 1px solid var(--ink);
     background: #fff; color: var(--ink); cursor: pointer; border-radius: 0; }
 #pA .dlg-b .danger { background: var(--red); border-color: var(--red); color: #fff; }
-#pA .dlg-b button.on { background: var(--ink); color: #fff; }
 </style>
 <style>
 /* ===== 第 2 页：库存 ===== */
@@ -195,15 +182,9 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   <div class="today" id="a-today"></div>
   <div class="cprow"><button type="button" class="cpbtn exbtn">导出</button><button type="button" class="cpbtn imbtn">导入</button></div>
 
-  <div class="calc">
-    <div><div class="lab">日期计算</div><div id="a-calcBaseBox"></div></div>
-    <div><div class="lab">加（天）</div><div id="a-calcDaysBox"></div></div>
-    <div><div class="lab">等于</div><div class="res" id="a-calcRes"></div></div>
-  </div>
-
   <div class="row hd">
     <div class="rn"></div>
-    <div class="body"><div>事项</div><div>自</div><div>至</div><div>历时</div><div>余天</div></div>
+    <div class="body"><div>事项</div><div>自</div><div>期限</div><div>至</div><div>余天</div></div>
   </div>
   <div id="a-rows"></div>
 
@@ -215,16 +196,6 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     <div id="a-mini"></div>
   </div>
 </main>
-
-<div class="mask" id="a-maskEla" hidden>
-  <div class="dlg">
-    <div class="dlg-t" id="a-elaT"></div>
-    <div class="dlg-b">
-      <button type="button" id="a-elaShow">显示</button>
-      <button type="button" id="a-elaHide">不显示</button>
-    </div>
-  </div>
-</div>
 
 <div class="mask" id="a-maskM" hidden>
   <div class="dlg">
@@ -381,15 +352,19 @@ function copyToClipboard(text, btn) {
   var rowsData = [];
   for (var i = 0; i < ROWS; i++) {
     var o = (state.rows && state.rows[i]) || {};
-    rowsData.push({ text: o.text || "", from: o.from || "", to: o.to || "", hide: !!o.hide });
+    rowsData.push({
+      text: o.text || "",
+      from: o.from || "",
+      term: o.term != null ? String(o.term) : "",
+      to: o.to || ""
+    });
   }
   var miniData = [];
   for (var j = 0; j < MINI_ROWS; j++) {
     var m = (state.mini && state.mini[j]) || {};
     miniData.push({ text: m.text || "", stock: m.stock || "", due: m.due || "" });
   }
-  var calc = state.calc || { base: todayIso(), days: "30" };
-  state = { rows: rowsData, calc: calc, mini: miniData };
+  state = { rows: rowsData, mini: miniData };
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
 
   // ===== 日期输入框：点一下全选，直接用数字键盘输入，离开后自动整理成「X年X月X日」=====
@@ -430,51 +405,30 @@ function copyToClipboard(text, btn) {
     todayEl.textContent = "今日日期：" + fmt(lastToday) + "\u3000星期" + wd;
   }
 
-  // ===== 日期计算：日期 + 天数 = 日期 =====
-  var resEl = document.getElementById("a-calcRes");
-  function updateCalc() {
-    var n = parseInt(state.calc.days, 10);
-    var b = state.calc.base;
-    resEl.textContent = (b && !isNaN(n)) ? fmt(addDays(b, n)) : "";
-  }
-  document.getElementById("a-calcBaseBox").appendChild(
-    dateInput(function () { return state.calc.base; }, function (v) { state.calc.base = v; }, updateCalc)
-  );
-  var daysEl = document.createElement("input");
-  daysEl.type = "text"; daysEl.autocomplete = "off"; daysEl.setAttribute("inputmode", "numeric");
-  daysEl.value = state.calc.days;
-  daysEl.addEventListener("focus", function () {
-    setTimeout(function () { try { daysEl.select(); } catch (e) {} }, 0);
-  });
-  daysEl.addEventListener("input", function () {
-    var v = daysEl.value.replace(/[^\d-]/g, "").replace(/(?!^)-/g, "").slice(0, 6);
-    daysEl.value = v;
-    state.calc.days = v;
-    save();
-    updateCalc();
-  });
-  daysEl.addEventListener("keydown", function (e) {
-    if (e.key === "Enter") { e.preventDefault(); daysEl.blur(); }
-  });
-  document.getElementById("a-calcDaysBox").appendChild(daysEl);
-
   // ===== 表格 =====
+  // 有「自」和「期限」时，自动推算「至」
+  function syncToFromTerm(row) {
+    var r = row._r;
+    var n = parseInt(r.term, 10);
+    if (r.from && r.term !== "" && !isNaN(n)) {
+      r.to = addDays(r.from, n);
+      row._in.o.value = fmt(r.to);
+    }
+  }
   function updateRem(row) {
     var t = dayNum(todayIso()), r = row._r;
     var left = r.to ? dayNum(r.to) - t : null;                          // 余天：至 − 今天
     row._rem.textContent = left === null ? "" : String(left);
     row._rem.classList.toggle("low", left !== null && left <= 5);        // 5 天及以下（含已过期的负数）显示红色，更多显示黑色
-    // 历时：今天 − 自（「自」在今天之后则为负数）；这一行选了「不显示」时留空
-    row._ela.textContent = (r.from && !r.hide) ? String(t - dayNum(r.from)) : "";
   }
   function updateAllRem() { [].forEach.call(box.children, updateRem); }
 
-  // ===== 点行号或「余天」数字：确认后清空这一行 =====
+  // ===== 点「余天」数字：确认后清空这一行 =====
   var mask = document.getElementById("a-mask");
   var pending = null;
   function askClear(row) {
     var r = row._r;
-    if (!r.text && !r.from && !r.to) return;          // 本来就是空的，不弹窗
+    if (!r.text && !r.from && !r.term && !r.to) return;          // 本来就是空的，不弹窗
     pending = row;
     var idx = [].indexOf.call(box.children, row);
     var name = r.text ? "「" + (r.text.length > 12 ? r.text.slice(0, 12) + "…" : r.text) + "」" : "";
@@ -488,35 +442,13 @@ function copyToClipboard(text, btn) {
     var row = pending;
     if (row) {
       var r = row._r;
-      r.text = ""; r.from = ""; r.to = ""; r.hide = false;
-      row._in.t.value = ""; row._in.f.value = ""; row._in.o.value = "";
+      r.text = ""; r.from = ""; r.term = ""; r.to = "";
+      row._in.t.value = ""; row._in.f.value = ""; row._in.k.value = ""; row._in.o.value = "";
       updateRem(row);
       save();
     }
     closeAsk();
   };
-
-  // ===== 点「历时」格子：选择显示 / 不显示（整行都没内容的行，点了没反应）=====
-  var maskEla = document.getElementById("a-maskEla");
-  var elaRow = null;
-  function askEla(row) {
-    var r = row._r;
-    if (!r.text && !r.from && !r.to) return;
-    elaRow = row;
-    var idx = [].indexOf.call(box.children, row);
-    document.getElementById("a-elaT").textContent = "第 " + (idx + 1) + " 项：历时一栏";
-    document.getElementById("a-elaShow").classList.toggle("on", !r.hide);
-    document.getElementById("a-elaHide").classList.toggle("on", !!r.hide);
-    maskEla.hidden = false;
-  }
-  function closeEla() { maskEla.hidden = true; elaRow = null; }
-  function setEla(hide) {
-    if (elaRow) { elaRow._r.hide = hide; updateRem(elaRow); save(); }
-    closeEla();
-  }
-  document.getElementById("a-elaShow").onclick = function () { setEla(false); };
-  document.getElementById("a-elaHide").onclick = function () { setEla(true); };
-  maskEla.onclick = function (e) { if (e.target === maskEla) closeEla(); };
 
   var box = document.getElementById("a-rows");
   function buildRows() {
@@ -535,28 +467,56 @@ function copyToClipboard(text, btn) {
       t.addEventListener("input", function () { r.text = t.value; save(); });
       tw.appendChild(t);
 
-      var fIn = dateInput(function () { return r.from; }, function (v) { r.from = v; }, function () { updateRem(row); });
+      var fIn = dateInput(function () { return r.from; }, function (v) {
+        r.from = v;
+        syncToFromTerm(row);
+      }, function () { updateRem(row); });
       var fw = document.createElement("div");
       fw.appendChild(fIn);
 
-      var oIn = dateInput(function () { return r.to; }, function (v) { r.to = v; }, function () { updateRem(row); });
+      var kIn = document.createElement("input");
+      kIn.type = "text"; kIn.className = "term"; kIn.autocomplete = "off";
+      kIn.setAttribute("inputmode", "numeric");
+      kIn.value = r.term;
+      kIn.addEventListener("focus", function () {
+        setTimeout(function () { try { kIn.select(); } catch (e) {} }, 0);
+      });
+      kIn.addEventListener("input", function () {
+        var v = kIn.value.replace(/[^\d-]/g, "").replace(/(?!^)-/g, "").slice(0, 6);
+        kIn.value = v;
+        r.term = v;
+        syncToFromTerm(row);
+        save();
+        updateRem(row);
+      });
+      kIn.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); kIn.blur(); }
+      });
+      var kw = document.createElement("div");
+      kw.appendChild(kIn);
+
+      var oIn = dateInput(function () { return r.to; }, function (v) {
+        r.to = v;
+        if (!v) {
+          r.term = "";
+          kIn.value = "";
+        } else if (r.from && r.term !== "") {
+          r.term = String(dayNum(v) - dayNum(r.from));
+          kIn.value = r.term;
+        }
+      }, function () { updateRem(row); });
       var ow = document.createElement("div");
       ow.appendChild(oIn);
-
-      var ela = document.createElement("div");
-      ela.className = "ela";
-      row._ela = ela;
-      ela.onclick = function () { askEla(row); };
 
       var rem = document.createElement("div");
       rem.className = "rem";
       row._rem = rem;
-      row._in = { t: t, f: fIn, o: oIn };
+      row._in = { t: t, f: fIn, k: kIn, o: oIn };
       rem.onclick = function () { askClear(row); };
 
       var body = document.createElement("div");
       body.className = "body";
-      body.appendChild(tw); body.appendChild(fw); body.appendChild(ow); body.appendChild(ela); body.appendChild(rem);
+      body.appendChild(tw); body.appendChild(fw); body.appendChild(kw); body.appendChild(ow); body.appendChild(rem);
       row._body = body;
 
       row.appendChild(rn); row.appendChild(body);
@@ -867,7 +827,6 @@ function copyToClipboard(text, btn) {
 
 
   showToday();
-  updateCalc();
   updateAllRem();
   updateMiniAll();
 
@@ -1207,15 +1166,13 @@ function copyToClipboard(text, btn) {
   // ---------- 导出 ----------
   function build() {
     var a = load(K1), b = load(K2), out1 = [head()];
-    var n = parseInt(a.calc && a.calc.days, 10);
-    if (a.calc && a.calc.base && !isNaN(n)) out1.push("日期计算：" + fmt(a.calc.base) + " 加 " + n + " 天 = " + fmt(addDays(a.calc.base, n)));
     var main = [], mini = [];
     (a.rows || []).forEach(function (r, i) {
-      if (!r || (!r.text && !r.from && !r.to)) return;
+      if (!r || (!r.text && !r.from && !r.term && !r.to)) return;
       var p = [(i + 1) + ". " + (r.text || "")];
       if (r.from) p.push("自 " + fmt(r.from));
+      if (r.term) p.push("期限 " + r.term + " 天");
       if (r.to) p.push("至 " + fmt(r.to));
-      if (r.from && !r.hide) p.push("历时 " + (dn(T) - dn(r.from)) + " 天");
       if (r.to) p.push("余 " + (dn(r.to) - dn(T)) + " 天");
       main.push(p.join(SP));
     });
@@ -1247,8 +1204,8 @@ function copyToClipboard(text, btn) {
     var m = /(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/.exec(s || "");
     return m ? iso(+m[1], +m[2], +m[3]) : "";
   }
-  var KW = "自|至|历时|余|库存|限期|存量|日用量|可供";
-  var SPLIT = new RegExp("[\\s　]+(?=(?:" + KW + ")[\\s　]*[\\d])");
+  var KW = "自|期限|至|历时|余|库存|限期|存量|日用量|可供";
+  var SPLIT = new RegExp("[\\s　]+(?=(?:" + KW + ")[\\s　]*[-\\d])");
   var FIELD = new RegExp("^(" + KW + ")[\\s　]*([\\s\\S]*)$");
   function parseRow(line) {         // 返回 {i, name, f:{关键词: 值}}
     line = line.replace(/〔[^〕]*〕\s*$/, "").trim();
@@ -1259,6 +1216,7 @@ function copyToClipboard(text, btn) {
     return { i: +m[1] - 1, name: parts[0].trim() === "（空）" ? "" : parts[0].trim(), f: f };
   }
   function numv(s) { var m = /^[\d.]+/.exec(s || ""); return m ? m[0] : ""; }
+  function intv(s) { var m = /^-?\d+/.exec(s || ""); return m ? m[0] : ""; }
   function parse(text) {
     text = text.replace(/\r/g, "");
     var blocks = [], cur = null;
@@ -1273,12 +1231,10 @@ function copyToClipboard(text, btn) {
     else if (isStock(blocks[0])) B = blocks[0]; else A = blocks[0];
     var res = {};
     if (A) {
-      var calc = null, secs = [], sec = null;
+      var secs = [], sec = null;
       A.lines.forEach(function (l) {
-        var cm = /日期计算[:：]\s*(\d{4}\s*年.*?日)\s*加\s*(-?\d+)\s*天/.exec(l);
-        if (cm) { calc = { base: pdate(cm[1]), days: cm[2] }; return; }
-        if (!l.trim()) { sec = null; return; }
         if (/^\s*日期计算/.test(l)) return;
+        if (!l.trim()) { sec = null; return; }
         if (!sec) { sec = []; secs.push(sec); }
         sec.push(l);
       });
@@ -1286,12 +1242,18 @@ function copyToClipboard(text, btn) {
       secs.forEach(function (s, si) {
         s.forEach(function (l) {
           var r = parseRow(l); if (!r) return;
-          var isMini = ("库存" in r.f) || ("限期" in r.f) || (!("自" in r.f) && !("至" in r.f) && !("历时" in r.f) && si >= 1);
+          var isMini = ("库存" in r.f) || ("限期" in r.f) || (!("自" in r.f) && !("期限" in r.f) && !("至" in r.f) && !("历时" in r.f) && si >= 1);
           if (isMini) { if (r.i >= 0 && r.i < 5) mini[r.i] = { text: r.name, stock: numv(r.f["库存"]), due: pdate(r.f["限期"]) }; }
-          else if (r.i >= 0 && r.i < 10) { var from = pdate(r.f["自"]); rows[r.i] = { text: r.name, from: from, to: pdate(r.f["至"]), hide: !!from && !("历时" in r.f) }; }
+          else if (r.i >= 0 && r.i < 10) {
+            var from = pdate(r.f["自"]);
+            var term = intv(r.f["期限"]);
+            var to = pdate(r.f["至"]);
+            if (!to && from && term !== "") to = addDays(from, parseInt(term, 10));
+            rows[r.i] = { text: r.name, from: from, term: term, to: to };
+          }
         });
       });
-      res.a = { rows: rows, mini: mini, calc: calc };
+      res.a = { rows: rows, mini: mini };
     }
     if (B) {
       var rs = [];
@@ -1316,9 +1278,8 @@ function copyToClipboard(text, btn) {
     if (!confirm("导入会用这段文字覆盖本设备上" + (res.a && res.b ? "两页" : "对应那一页") + "的全部内容，确定吗？")) return;
     if (res.a) {
       var a = load(K1);
-      a.rows = fill(res.a.rows, 10, function () { return { text: "", from: "", to: "", hide: false }; });
+      a.rows = fill(res.a.rows, 10, function () { return { text: "", from: "", term: "", to: "" }; });
       a.mini = fill(res.a.mini, 5, function () { return { text: "", stock: "", due: "" }; });
-      if (res.a.calc && res.a.calc.base) a.calc = res.a.calc;
       try { localStorage.setItem(K1, JSON.stringify(a)); } catch (e) {}
     }
     if (res.b) {
