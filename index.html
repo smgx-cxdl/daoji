@@ -83,7 +83,8 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 #pA .row input:focus,
 #pA .calc input:focus { background: #fff8e6; }
 #pA .bad { background: #ffe3e3 !important; }
-#pA .rem { color: var(--red); font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0 2px;
+#pA .rem.low { color: var(--red); }
+#pA .rem { color: var(--ink); font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0 2px;
     cursor: pointer; user-select: none; }
 #pA .ela { color: var(--ink); font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0 2px;
     cursor: pointer; user-select: none; }
@@ -105,7 +106,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 #pB .sheet { max-width: 560px; margin: 16px auto; padding: 16px 12px 24px;
     background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.1); }
 #pB .today { font-size: 20px; font-weight: bold; margin: 4px 0 18px; }
-#pB .row { display: grid; grid-template-columns: 26px minmax(0, 1fr) 54px 54px 54px 58px; }
+#pB .row { display: grid; grid-template-columns: 26px minmax(0, 1fr) 52px 50px 40px 40px 58px; }
 #pB .row > * { min-height: 36px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid); }
 #pB .row > *:first-child { border-left: 1px solid var(--grid); }
 #pB .hd > * { border-top: 1px solid var(--grid); }
@@ -113,6 +114,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     font-size: 13px; font-weight: bold; white-space: nowrap; padding: 0 1px; }
 #pB .hd > div small { font-size: 10px; font-weight: normal; margin-left: 1px; }
 #pB .hd > div.l { justify-content: flex-start; padding-left: 8px; }
+#pB .hd > div.sg { font-size: 18px; }
 #pB .rn { display: flex; align-items: center; justify-content: center;
     color: var(--muted); font-size: 12px; cursor: pointer; user-select: none; }
 #pB .row input { width: 100%; height: 100%; min-height: 36px; border: none; background: transparent;
@@ -190,7 +192,8 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     <div class="l">物品</div>
     <div>库存<small>Pcs</small></div>
     <div>日用量</div>
-    <div>+ / -</div>
+    <div class="sg">+</div>
+    <div class="sg">-</div>
     <div>可供天数</div>
   </div>
   <div id="b-rows"></div>
@@ -356,7 +359,9 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   // ===== 表格 =====
   function updateRem(row) {
     var t = dayNum(todayIso()), r = row._r;
-    row._rem.textContent = r.to ? String(dayNum(r.to) - t) : "";        // 余天：至 − 今天
+    var left = r.to ? dayNum(r.to) - t : null;                          // 余天：至 − 今天
+    row._rem.textContent = left === null ? "" : String(left);
+    row._rem.classList.toggle("low", left !== null && left <= 5);        // 5 天及以下（含已过期的负数）显示红色，更多显示黑色
     // 历时：今天 − 自（「自」在今天之后则为负数）；这一行选了「不显示」时留空
     row._ela.textContent = (r.from && !r.hide) ? String(t - dayNum(r.from)) : "";
   }
@@ -680,7 +685,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     if (i >= 0) {
       var r = state.rows[i], c = cells[i];
       r.name = ""; r.stock = ""; r.use = "";
-      c.name.value = ""; c.stock.value = ""; c.use.value = ""; c.pm.value = "";
+      c.name.value = ""; c.stock.value = ""; c.use.value = ""; c.plus.value = ""; c.minus.value = "";
       refresh(c.days, r);
       if (state.undo && state.undo.i === i) { state.undo = null; showUndo(); }
       save();
@@ -735,31 +740,37 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
       r.use = us.value; save(); refresh(days, r);
     });
 
-    // +/-：输入「-2」就在库存上减 2，输入「5」或「+5」就加 5；确认后这一格自动清空，库存立刻更新
-    var pm = numInput("", "numeric");
-    pm.addEventListener("blur", function () {
-      var raw = pm.value.replace(/\s/g, "").replace(/[－−–—﹣]/g, "-").replace(/＋/g, "+");
-      if (raw === "") return;
-      if (!/^[+-]?\d+(\.\d+)?$/.test(raw)) {
-        pm.classList.add("bad");
-        setTimeout(function () { pm.classList.remove("bad"); pm.value = ""; }, 600);
-        return;
-      }
-      var delta = parseFloat(raw);
-      var prevStr = r.stock;
-      var next = Math.max(0, r2((num(r.stock) || 0) + delta));   // 库存最少减到 0
-      r.stock = String(next);
-      st.value = r.stock;
-      pm.value = "";
-      state.undo = { i: i, prev: prevStr, delta: (delta < 0 ? "−" : "+") + Math.abs(delta) };
-      save();
-      refresh(days, r);
-      showUndo();
-    });
+    // 「+」格输入数字 → 库存加上这个数；「-」格输入数字 → 库存减去这个数。
+    // 输完点键盘确定或点别处就生效，这一格自动清空，库存立刻更新（不需要输入正负号）
+    function adjuster(sign) {
+      var el = numInput("", "decimal");
+      el.addEventListener("input", function () { el.value = el.value.replace(/[^\d.]/g, ""); });
+      el.addEventListener("blur", function () {
+        var raw = el.value.trim();
+        if (raw === "") return;
+        if (!/^\d+(\.\d+)?$/.test(raw)) {
+          el.classList.add("bad");
+          setTimeout(function () { el.classList.remove("bad"); el.value = ""; }, 600);
+          return;
+        }
+        var delta = sign * parseFloat(raw);
+        var prevStr = r.stock;
+        var next = Math.max(0, r2((num(r.stock) || 0) + delta));   // 库存最少减到 0
+        r.stock = String(next);
+        st.value = r.stock;
+        el.value = "";
+        state.undo = { i: i, prev: prevStr, delta: (sign < 0 ? "−" : "+") + Math.abs(parseFloat(raw)) };
+        save();
+        refresh(days, r);
+        showUndo();
+      });
+      return el;
+    }
+    var plus = adjuster(1), minus = adjuster(-1);
 
-    cells[i] = { name: nm, stock: st, use: us, pm: pm, days: days };
+    cells[i] = { name: nm, stock: st, use: us, plus: plus, minus: minus, days: days };
     function wrap(el) { var d = document.createElement("div"); d.appendChild(el); return d; }   // 边框画在外层格子上
-    row.appendChild(rn); row.appendChild(wrap(nm)); row.appendChild(wrap(st)); row.appendChild(wrap(us)); row.appendChild(wrap(pm)); row.appendChild(days);
+    row.appendChild(rn); row.appendChild(wrap(nm)); row.appendChild(wrap(st)); row.appendChild(wrap(us)); row.appendChild(wrap(plus)); row.appendChild(wrap(minus)); row.appendChild(days);
     box.appendChild(row);
     refresh(days, r);
   });
