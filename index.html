@@ -37,6 +37,14 @@
   }
   #pgbar button:disabled { color: #ccc; cursor: default; }
   #pgtxt { min-width: 118px; text-align: center; }
+
+  /* 右上角「复制文字」按钮（两页共用） */
+  .cprow { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+  #pA .cpbtn, #pB .cpbtn {
+    font: inherit; font-size: 12px; line-height: 1.2; padding: 5px 11px; border: 1px solid var(--ink);
+    background: #fff; color: var(--ink); border-radius: 0; cursor: pointer; min-width: 74px;
+  }
+  #pA .cpbtn:active, #pB .cpbtn:active { background: #eee; }
 </style>
 <style>
 /* ===== 第 1 页：倒数日 ===== */
@@ -183,6 +191,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   <section class="page" id="pA">
 
 <main class="sheet">
+  <div class="cprow"><button type="button" class="cpbtn" id="a-copy">复制文字</button></div>
   <div class="today" id="a-today"></div>
 
   <div class="calc">
@@ -241,6 +250,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   <section class="page" id="pB">
 
 <main class="sheet">
+  <div class="cprow"><button type="button" class="cpbtn" id="b-copy">复制文字</button></div>
   <div class="today" id="b-today"></div>
 
   <div class="row hd">
@@ -279,6 +289,34 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   <button type="button" id="pgNext" aria-label="下一页">›</button>
 </div>
 
+<script>
+/* ===== 复制到剪贴板（两页共用）===== */
+function copyToClipboard(text, btn) {
+  if (btn._orig === undefined) btn._orig = btn.textContent;
+  function flash(msg) {
+    btn.textContent = msg;
+    clearTimeout(btn._t);
+    btn._t = setTimeout(function () { btn.textContent = btn._orig; }, 1600);
+  }
+  function fallback() {                       // 老浏览器 / 非 https 页面：用临时文本框复制
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { ta.setSelectionRange(0, text.length); } catch (e) {}
+    var done = false;
+    try { done = document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    flash(done ? "已复制 ✓" : "复制失败");
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(function () { flash("已复制 ✓"); }, fallback);
+  } else {
+    fallback();
+  }
+}
+</script>
 <script>
 /* ===== 第 1 页：倒数日 ===== */
 
@@ -826,6 +864,41 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     if (inp) inp.focus();
   });
 
+  // ===== 右上角按钮：把这一页复制成文字（按现在页面上的顺序，空行不复制）=====
+  function buildText() {
+    var t = todayIso(), out = [todayEl.textContent];
+    var n = parseInt(state.calc.days, 10);
+    if (state.calc.base && !isNaN(n)) {
+      out.push("日期计算：" + fmt(state.calc.base) + " 加 " + n + " 天 = " + fmt(addDays(state.calc.base, n)));
+    }
+    var main = [];
+    [].forEach.call(box.children, function (row, i) {
+      var r = row._r;
+      if (!r.text && !r.from && !r.to) return;
+      var p = [(i + 1) + ". " + (r.text || "（未命名）")];
+      if (r.from) p.push("自 " + fmt(r.from));
+      if (r.to) p.push("至 " + fmt(r.to));
+      if (r.from && !r.hide) p.push("历时 " + (dayNum(t) - dayNum(r.from)) + " 天");
+      if (r.to) p.push("余 " + (dayNum(r.to) - dayNum(t)) + " 天");
+      main.push(p.join("　"));
+    });
+    var mini = [];
+    [].forEach.call(miniBox.children, function (row, i) {
+      var m = row._m;
+      if (!m.text && !m.stock && !m.due) return;
+      var p = [(i + 1) + ". " + (m.text || "（未命名）")];
+      if (m.stock) p.push("库存 " + m.stock);
+      if (m.due) { p.push("限期 " + fmt(m.due)); p.push("余 " + (dayNum(m.due) - dayNum(t)) + " 天"); }
+      mini.push(p.join("　"));
+    });
+    if (main.length) out = out.concat([""], main);
+    if (mini.length) out = out.concat([""], mini);
+    if (!main.length && !mini.length) out.push("", "（暂无内容）");
+    return out.join("\n");
+  }
+  var copyBtn = document.getElementById("a-copy");
+  copyBtn.onclick = function () { copyToClipboard(buildText(), copyBtn); };
+
   showToday();
   updateCalc();
   updateAllRem();
@@ -1146,6 +1219,24 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     var inp = cell.querySelector("input");
     if (inp) inp.focus();
   });
+
+  // ===== 右上角按钮：把这一页复制成文字（按现在页面上的顺序，空行不复制）=====
+  function buildText() {
+    var out = [todayEl.textContent], lines = [];
+    [].forEach.call(box.children, function (row, i) {
+      var r = row._r;
+      if (!r.name && !r.stock && !r.use) return;
+      var p = [(i + 1) + ". " + (r.name || "（未命名）")];
+      if (r.stock) p.push("存量 " + r.stock);
+      if (r.use) p.push("日用量 " + r.use);
+      var d = row._c.days.textContent;
+      if (d !== "") p.push("可供 " + d + " 天");
+      lines.push(p.join("　"));
+    });
+    return out.concat([""], lines.length ? lines : ["（暂无内容）"]).join("\n");
+  }
+  var copyBtn = document.getElementById("b-copy");
+  copyBtn.onclick = function () { copyToClipboard(buildText(), copyBtn); };
 
   showUndo();
 })();
