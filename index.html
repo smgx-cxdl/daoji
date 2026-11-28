@@ -90,6 +90,18 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     cursor: pointer; user-select: none; }
 #pA .body.lift { position: relative; z-index: 3; background: #fffbe8;
     box-shadow: 0 4px 14px rgba(0,0,0,.28); }
+#pA .mini-wrap { margin-top: 22px; }
+#pA .mini-tbl { display: grid; grid-template-columns: 42px 110px 64px; width: fit-content;
+    border-top: 1px solid var(--grid); border-left: 1px solid var(--grid); }
+#pA .mini-tbl > div { min-height: 32px; border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
+    display: flex; align-items: center; }
+#pA .mini-tbl .m-hd { justify-content: center; font-size: 13px; font-weight: bold; padding: 0 4px; }
+#pA .mini-tbl .m-hd.l { justify-content: flex-start; padding-left: 6px; }
+#pA .mini-tbl .m-no { justify-content: center; color: var(--muted); font-size: 12px; user-select: none; }
+#pA .mini-tbl input { width: 100%; height: 100%; min-height: 32px; border: none; background: transparent;
+    font: inherit; font-size: 14px; color: var(--ink); padding: 0 6px; border-radius: 0; outline: none; }
+#pA .mini-tbl input.c { text-align: center; padding: 0 4px; }
+#pA .mini-tbl input:focus { background: #fff8e6; }
 #pA .mask { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.4); z-index: 10;
     display: flex; align-items: flex-start; justify-content: center; padding-top: 28vh; }
 #pA .mask[hidden] { display: none; }
@@ -168,6 +180,10 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     <div class="body"><div>事项</div><div>自</div><div>至</div><div>历时</div><div>余天</div></div>
   </div>
   <div id="a-rows"></div>
+
+  <div class="mini-wrap">
+    <div class="mini-tbl" id="a-mini"></div>
+  </div>
 </main>
 
 <div class="mask" id="a-maskEla" hidden>
@@ -237,7 +253,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 /* ===== 第 1 页：倒数日 ===== */
 
 (function () {
-  var ROWS = 10, KEY = "tracker-v1";
+  var ROWS = 10, MINI_ROWS = 4, KEY = "tracker-v1";
 
   function pad(n) { return (n < 10 ? "0" : "") + n; }
   function iso(y, m, d) { return y + "-" + pad(m) + "-" + pad(d); }
@@ -298,8 +314,13 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     var o = (state.rows && state.rows[i]) || {};
     rowsData.push({ text: o.text || "", from: o.from || "", to: o.to || "", hide: !!o.hide });
   }
+  var miniData = [];
+  for (var j = 0; j < MINI_ROWS; j++) {
+    var m = (state.mini && state.mini[j]) || {};
+    miniData.push({ text: m.text || "", stock: m.stock || "" });
+  }
   var calc = state.calc || { base: todayIso(), days: "30" };
-  state = { rows: rowsData, calc: calc };
+  state = { rows: rowsData, calc: calc, mini: miniData };
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
 
   // ===== 日期输入框：点一下全选，直接用数字键盘输入，离开后自动整理成「X年X月X日」=====
@@ -474,6 +495,38 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     });
   }
   buildRows();
+
+  // ===== 底下小表格：序号 / 事项 / 库存 =====
+  var miniBox = document.getElementById("a-mini");
+  ["序号", "事项", "库存"].forEach(function (h, idx) {
+    var d = document.createElement("div");
+    d.className = "m-hd" + (idx === 1 ? " l" : "");
+    d.textContent = h;
+    miniBox.appendChild(d);
+  });
+  state.mini.forEach(function (m, idx) {
+    var no = document.createElement("div");
+    no.className = "m-no";
+    no.textContent = String(idx + 1);
+
+    var tw = document.createElement("div");
+    var ti = document.createElement("input");
+    ti.type = "text"; ti.maxLength = 30; ti.autocomplete = "off"; ti.value = m.text;
+    ti.addEventListener("input", function () { m.text = ti.value; save(); });
+    ti.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); ti.blur(); } });
+    tw.appendChild(ti);
+
+    var sw = document.createElement("div");
+    var si = document.createElement("input");
+    si.type = "text"; si.className = "c"; si.maxLength = 20; si.autocomplete = "off"; si.value = m.stock;
+    si.addEventListener("input", function () { m.stock = si.value; save(); });
+    si.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); si.blur(); } });
+    sw.appendChild(si);
+
+    miniBox.appendChild(no);
+    miniBox.appendChild(tw);
+    miniBox.appendChild(sw);
+  });
 
   // ===== 长按任意一行，上下拖动换顺序 =====
   var LONG = 400, SLOP = 8;
