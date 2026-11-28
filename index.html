@@ -64,13 +64,15 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     color: var(--muted); font-size: 12px; user-select: none;
     display: flex; align-items: center; justify-content: center; padding: 0; }
 #pA .hd .rn,
-#pA .hd .body > * { border-top: 1px solid var(--grid); }
+#pA .hd .body > * { border-top: 1px solid var(--grid); min-height: 40px; }
 #pA .hd .body > div { display: flex; align-items: center; padding: 0 6px; white-space: nowrap;
     font-family: "Songti TC", "PMingLiU", "SimSun", serif; font-weight: bold; font-size: 14px; }
 #pA .hd .body > div:nth-child(2),
 #pA .hd .body > div:nth-child(3),
 #pA .hd .body > div:nth-child(4),
 #pA .hd .body > div:nth-child(5) { justify-content: center; padding: 0 2px; }
+#pA .hd .body > div.th-term { flex-direction: column; line-height: 1.15; padding: 3px 2px; }
+#pA .hd .body > div.th-term small { font-size: 10.5px; font-weight: normal; line-height: 1.1; }
 #pA #a-rows { counter-reset: rowno; }
 #pA #a-rows .row { counter-increment: rowno; }
 #pA #a-rows .rn::before { content: counter(rowno); }
@@ -137,7 +139,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 #pB .body > *, #pB .rn { min-height: 36px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid); }
 #pB .rn { border-left: 1px solid var(--grid); display: flex; align-items: center; justify-content: center;
     color: var(--muted); font-size: 12px; user-select: none; }
-#pB .hd .rn, #pB .hd .body > * { border-top: 1px solid var(--grid); }
+#pB .hd .rn, #pB .hd .body > * { border-top: 1px solid var(--grid); min-height: 40px; }
 #pB .hd .body > div { display: flex; align-items: center; justify-content: center;
     font-size: 13px; font-weight: bold; white-space: nowrap; padding: 0 1px; }
 #pB .hd .body > div small { font-size: 10px; font-weight: normal; margin-left: 1px; }
@@ -184,7 +186,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 
   <div class="row hd">
     <div class="rn"></div>
-    <div class="body"><div>事项</div><div>自</div><div>期限</div><div>至</div><div>余天</div></div>
+    <div class="body"><div>事项</div><div>自</div><div class="th-term">期限<small>（天）</small></div><div>至</div><div>余天</div></div>
   </div>
   <div id="a-rows"></div>
 
