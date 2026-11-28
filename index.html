@@ -91,11 +91,11 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 #pA .body.lift { position: relative; z-index: 3; background: #fffbe8;
     box-shadow: 0 4px 14px rgba(0,0,0,.28); }
 #pA .mini-wrap { margin-top: 18px; width: fit-content; max-width: 100%; }
-#pA .mrow { display: grid; grid-template-columns: 32px auto; -webkit-touch-callout: none;
+#pA .mrow { display: grid; grid-template-columns: 24px auto; -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent; }
 /* 日期列宽按字体算：8 个数字 + 3 个汉字 + 留白，刚好放下「2026年12月28日」 */
 #pA .m-body { display: grid; font-size: 10.5px;
-    grid-template-columns: 86px 48px calc(8ch + 3em + 14px) 36px; }
+    grid-template-columns: 86px 36px calc(8ch + 3em + 14px) 36px; }
 #pA .m-body > *, #pA .m-no { min-height: 26px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid); }
 #pA .m-no { border-left: 1px solid var(--grid); display: flex; align-items: center; justify-content: center;
     color: var(--muted); font-size: 10px; user-select: none; }
@@ -247,7 +247,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     <div class="rn"></div>
     <div class="body">
       <div class="l">物品</div>
-      <div>库存<small>Pcs</small></div>
+      <div>存量<small>Pcs</small></div>
       <div>日用量</div>
       <div class="sg">+</div>
       <div class="sg">-</div>
@@ -844,7 +844,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 /* ===== 第 2 页：库存 ===== */
 
 (function () {
-  var ROWS = 10, KEY = "stock-v1";
+  var ROWS = 15, KEY = "stock-v1";
   var LOW = 5;   // 可供天数 ≤ 5 显示红色，高于 5 显示黑色
 
   function pad(n) { return (n < 10 ? "0" : "") + n; }
