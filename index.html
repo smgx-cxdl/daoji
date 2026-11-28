@@ -90,17 +90,17 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     cursor: pointer; user-select: none; }
 #pA .body.lift { position: relative; z-index: 3; background: #fffbe8;
     box-shadow: 0 4px 14px rgba(0,0,0,.28); }
-#pA .mini-wrap { margin-top: 22px; }
-#pA .mini-tbl { display: grid; grid-template-columns: 42px 110px 64px; width: fit-content;
+#pA .mini-wrap { margin-top: 18px; }
+#pA .mini-tbl { display: grid; grid-template-columns: 32px 86px 48px; width: fit-content;
     border-top: 1px solid var(--grid); border-left: 1px solid var(--grid); }
-#pA .mini-tbl > div { min-height: 32px; border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
+#pA .mini-tbl > div { min-height: 26px; border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
     display: flex; align-items: center; }
-#pA .mini-tbl .m-hd { justify-content: center; font-size: 13px; font-weight: bold; padding: 0 4px; }
-#pA .mini-tbl .m-hd.l { justify-content: flex-start; padding-left: 6px; }
-#pA .mini-tbl .m-no { justify-content: center; color: var(--muted); font-size: 12px; user-select: none; }
-#pA .mini-tbl input { width: 100%; height: 100%; min-height: 32px; border: none; background: transparent;
-    font: inherit; font-size: 14px; color: var(--ink); padding: 0 6px; border-radius: 0; outline: none; }
-#pA .mini-tbl input.c { text-align: center; padding: 0 4px; }
+#pA .mini-tbl .m-hd { justify-content: center; font-size: 11px; font-weight: bold; padding: 0 2px; white-space: nowrap; }
+#pA .mini-tbl .m-hd.l { justify-content: flex-start; padding-left: 5px; }
+#pA .mini-tbl .m-no { justify-content: center; color: var(--muted); font-size: 10px; user-select: none; }
+#pA .mini-tbl input { width: 100%; height: 100%; min-height: 26px; border: none; background: transparent;
+    font: inherit; font-size: 12px; color: var(--ink); padding: 0 5px; border-radius: 0; outline: none; }
+#pA .mini-tbl input.c { text-align: center; padding: 0 3px; }
 #pA .mini-tbl input:focus { background: #fff8e6; }
 #pA .mask { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.4); z-index: 10;
     display: flex; align-items: flex-start; justify-content: center; padding-top: 28vh; }
@@ -253,7 +253,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
 /* ===== 第 1 页：倒数日 ===== */
 
 (function () {
-  var ROWS = 10, MINI_ROWS = 4, KEY = "tracker-v1";
+  var ROWS = 10, MINI_ROWS = 5, KEY = "tracker-v1";
 
   function pad(n) { return (n < 10 ? "0" : "") + n; }
   function iso(y, m, d) { return y + "-" + pad(m) + "-" + pad(d); }
