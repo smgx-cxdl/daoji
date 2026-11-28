@@ -90,18 +90,34 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     cursor: pointer; user-select: none; }
 #pA .body.lift { position: relative; z-index: 3; background: #fffbe8;
     box-shadow: 0 4px 14px rgba(0,0,0,.28); }
-#pA .mini-wrap { margin-top: 18px; }
-#pA .mini-tbl { display: grid; grid-template-columns: 32px 86px 48px; width: fit-content;
-    border-top: 1px solid var(--grid); border-left: 1px solid var(--grid); }
-#pA .mini-tbl > div { min-height: 26px; border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
-    display: flex; align-items: center; }
-#pA .mini-tbl .m-hd { justify-content: center; font-size: 11px; font-weight: bold; padding: 0 2px; white-space: nowrap; }
-#pA .mini-tbl .m-hd.l { justify-content: flex-start; padding-left: 5px; }
-#pA .mini-tbl .m-no { justify-content: center; color: var(--muted); font-size: 10px; user-select: none; }
-#pA .mini-tbl input { width: 100%; height: 100%; min-height: 26px; border: none; background: transparent;
-    font: inherit; font-size: 12px; color: var(--ink); padding: 0 5px; border-radius: 0; outline: none; }
-#pA .mini-tbl input.c { text-align: center; padding: 0 3px; }
-#pA .mini-tbl input:focus { background: #fff8e6; }
+#pA .mini-wrap { margin-top: 18px; width: fit-content; max-width: 100%; }
+#pA .mrow { display: grid; grid-template-columns: 32px auto; -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent; }
+/* 日期列宽按字体算：8 个数字 + 3 个汉字 + 留白，刚好放下「2026年12月28日」 */
+#pA .m-body { display: grid; font-size: 10.5px;
+    grid-template-columns: 86px 48px calc(8ch + 3em + 14px) 36px; }
+#pA .m-body > *, #pA .m-no { min-height: 26px; border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid); }
+#pA .m-no { border-left: 1px solid var(--grid); display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 10px; user-select: none; }
+#pA .mhd .m-no, #pA .mhd .m-body > * { border-top: 1px solid var(--grid); }
+#pA .mhd .m-body > div { display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: bold; padding: 0 2px; white-space: nowrap; }
+#pA .mhd .m-body > div.l { justify-content: flex-start; padding-left: 5px; }
+/* 序号由位置自动编号：固定不动，内容拖到哪个位置就是哪个序号 */
+#pA #a-mini { counter-reset: mno; }
+#pA #a-mini .mrow { counter-increment: mno; }
+#pA #a-mini .m-no::before { content: counter(mno); }
+/* 平时输入框不接收触摸，点一下格子才聚焦（长按时不会弹键盘） */
+#pA .m-body input { width: 100%; height: 100%; min-height: 26px; border: none; background: transparent;
+    font: inherit; font-size: 12px; color: var(--ink); padding: 0 5px; border-radius: 0; outline: none;
+    pointer-events: none; }
+#pA .m-body input:focus { background: #fff8e6; pointer-events: auto; }
+#pA .m-body input.c { text-align: center; padding: 0 3px; }
+#pA .m-body input.dt { text-align: right; font-size: 1em; padding: 0 3px; }
+#pA .m-rem { display: flex; align-items: center; justify-content: center; font-size: 12px;
+    color: var(--ink); cursor: pointer; user-select: none; }
+#pA .m-rem.low { color: var(--red); }
+#pA .m-body.lift { position: relative; z-index: 3; background: #fffbe8; box-shadow: 0 4px 14px rgba(0,0,0,.28); }
 #pA .mask { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.4); z-index: 10;
     display: flex; align-items: flex-start; justify-content: center; padding-top: 28vh; }
 #pA .mask[hidden] { display: none; }
@@ -182,7 +198,11 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   <div id="a-rows"></div>
 
   <div class="mini-wrap">
-    <div class="mini-tbl" id="a-mini"></div>
+    <div class="mrow mhd">
+      <div class="m-no"></div>
+      <div class="m-body"><div class="l">事项</div><div>库存</div><div>限期</div><div>余天</div></div>
+    </div>
+    <div id="a-mini"></div>
   </div>
 </main>
 
@@ -192,6 +212,16 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
     <div class="dlg-b">
       <button type="button" id="a-elaShow">显示</button>
       <button type="button" id="a-elaHide">不显示</button>
+    </div>
+  </div>
+</div>
+
+<div class="mask" id="a-maskM" hidden>
+  <div class="dlg">
+    <div class="dlg-t" id="a-dlgTM"></div>
+    <div class="dlg-b">
+      <button type="button" id="a-dlgNoM">取消</button>
+      <button type="button" id="a-dlgYesM" class="danger">清空</button>
     </div>
   </div>
 </div>
@@ -317,7 +347,7 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   var miniData = [];
   for (var j = 0; j < MINI_ROWS; j++) {
     var m = (state.mini && state.mini[j]) || {};
-    miniData.push({ text: m.text || "", stock: m.stock || "" });
+    miniData.push({ text: m.text || "", stock: m.stock || "", due: m.due || "" });
   }
   var calc = state.calc || { base: todayIso(), days: "30" };
   state = { rows: rowsData, calc: calc, mini: miniData };
@@ -496,36 +526,185 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   }
   buildRows();
 
-  // ===== 底下小表格：序号 / 事项 / 库存 =====
+  // ===== 通用：长按一行上下拖动换顺序（序号列固定不动）=====
+  function enableDrag(box, rowSel, noSel, onDrop) {
+    var LONG = 400, SLOP = 8;
+    var press = null, drag = null, lastTouch = 0, suppressUntil = 0;
+
+    function cancelPress() { if (press) { clearTimeout(press.timer); press = null; } }
+    function startPress(row, x, y) {
+      cancelPress();
+      press = { row: row, x: x, y: y, timer: setTimeout(function () { beginDrag(); }, LONG) };
+    }
+    function beginDrag() {
+      if (!press) return;
+      var row = press.row;
+      drag = { row: row, body: row._body, grab: press.y - row.getBoundingClientRect().top, dy: 0 };
+      press = null;
+      try { var ae = document.activeElement; if (ae && row.contains(ae)) ae.blur(); } catch (e) {}
+      document.body.classList.add("dragging");
+      row._body.classList.add("lift");
+      try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
+    }
+    function moveDrag(y) {
+      var row = drag.row, h = row.offsetHeight;
+      var br = box.getBoundingClientRect();
+      var desired = Math.max(br.top - 6, Math.min(y - drag.grab, br.bottom - h + 6));
+      var dy = desired - row.getBoundingClientRect().top;
+      for (var g = 0; g < 12; g++) {
+        var next = row.nextElementSibling, prev = row.previousElementSibling;
+        if (dy > h / 2 && next) box.insertBefore(row, next.nextSibling);
+        else if (dy < -h / 2 && prev) box.insertBefore(row, prev);
+        else break;
+        dy = desired - row.getBoundingClientRect().top;
+      }
+      drag.dy = dy;
+      drag.body.style.transform = "translateY(" + dy + "px)";
+    }
+    function endDrag() {
+      var row = drag.row;
+      row._body.style.transform = "";
+      row._body.classList.remove("lift");
+      document.body.classList.remove("dragging");
+      drag = null;
+      suppressUntil = Date.now() + 500;
+      onDrop([].slice.call(box.children));
+    }
+    function pressable(e) {
+      var row = e.target.closest ? e.target.closest(rowSel) : null;
+      if (!row || e.target.closest(noSel) || e.target === document.activeElement) return null;
+      return row;
+    }
+
+    box.addEventListener("touchstart", function (e) {
+      lastTouch = Date.now();
+      if (e.touches.length !== 1) { cancelPress(); return; }
+      var row = pressable(e);
+      if (row) startPress(row, e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+    box.addEventListener("touchmove", function (e) {
+      lastTouch = Date.now();
+      var t = e.touches[0];
+      if (drag) { if (e.cancelable) e.preventDefault(); moveDrag(t.clientY); return; }
+      if (press && (Math.abs(t.clientX - press.x) > SLOP || Math.abs(t.clientY - press.y) > SLOP)) cancelPress();
+    }, { passive: false });
+    function endTouch(e) {
+      lastTouch = Date.now();
+      if (drag) { if (e.cancelable) e.preventDefault(); endDrag(); }
+      cancelPress();
+    }
+    box.addEventListener("touchend", endTouch);
+    box.addEventListener("touchcancel", endTouch);
+    box.addEventListener("contextmenu", function (e) { if (drag || press) e.preventDefault(); });
+
+    box.addEventListener("mousedown", function (e) {
+      if (Date.now() - lastTouch < 800 || e.button !== 0) return;
+      var row = pressable(e);
+      if (row) startPress(row, e.clientX, e.clientY);
+    });
+    document.addEventListener("mousemove", function (e) {
+      if (Date.now() - lastTouch < 800) return;
+      if (drag) { e.preventDefault(); moveDrag(e.clientY); return; }
+      if (press && (Math.abs(e.clientX - press.x) > SLOP || Math.abs(e.clientY - press.y) > SLOP)) cancelPress();
+    });
+    document.addEventListener("mouseup", function () {
+      if (Date.now() - lastTouch < 800) return;
+      if (drag) endDrag();
+      cancelPress();
+    });
+    // 拖动刚结束时，吞掉紧跟着的那一下点击
+    box.addEventListener("click", function (e) {
+      if (Date.now() < suppressUntil) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+  }
+
+  // ===== 底下小表格：序号 / 事项 / 库存 / 限期 / 余天 =====
   var miniBox = document.getElementById("a-mini");
-  ["序号", "事项", "库存"].forEach(function (h, idx) {
-    var d = document.createElement("div");
-    d.className = "m-hd" + (idx === 1 ? " l" : "");
-    d.textContent = h;
-    miniBox.appendChild(d);
-  });
-  state.mini.forEach(function (m, idx) {
+
+  function updateMini(row) {
+    var m = row._m;
+    var left = m.due ? dayNum(m.due) - dayNum(todayIso()) : null;       // 余天：限期 − 今天
+    row._rem.textContent = left === null ? "" : String(left);
+    row._rem.classList.toggle("low", left !== null && left <= 5);        // 5 天及以下（含已过期）红色，其余黑色
+  }
+  function updateMiniAll() { [].forEach.call(miniBox.children, updateMini); }
+
+  // 点「余天」：确认后清空这一项
+  var maskM = document.getElementById("a-maskM");
+  var pendingM = null;
+  function askMini(row) {
+    var m = row._m;
+    if (!m.text && !m.stock && !m.due) return;           // 整行都没内容，点了没反应
+    pendingM = row;
+    var nm = m.text ? "「" + (m.text.length > 12 ? m.text.slice(0, 12) + "…" : m.text) + "」" : "";
+    document.getElementById("a-dlgTM").textContent =
+      "是否清空第 " + ([].indexOf.call(miniBox.children, row) + 1) + " 项" + nm + "？";
+    maskM.hidden = false;
+  }
+  function closeMini() { maskM.hidden = true; pendingM = null; }
+  document.getElementById("a-dlgNoM").onclick = closeMini;
+  maskM.onclick = function (e) { if (e.target === maskM) closeMini(); };
+  document.getElementById("a-dlgYesM").onclick = function () {
+    var row = pendingM;
+    if (row) {
+      var m = row._m;
+      m.text = ""; m.stock = ""; m.due = "";
+      row._in.t.value = ""; row._in.s.value = ""; row._in.d.value = "";
+      updateMini(row);
+      save();
+    }
+    closeMini();
+  };
+
+  function wrapCell(el) { var d = document.createElement("div"); d.appendChild(el); return d; }   // 边框画在外层格子上
+
+  state.mini.forEach(function (m) {
+    var row = document.createElement("div");
+    row.className = "mrow";
+    row._m = m;
+
     var no = document.createElement("div");
     no.className = "m-no";
-    no.textContent = String(idx + 1);
 
-    var tw = document.createElement("div");
     var ti = document.createElement("input");
     ti.type = "text"; ti.maxLength = 30; ti.autocomplete = "off"; ti.value = m.text;
     ti.addEventListener("input", function () { m.text = ti.value; save(); });
     ti.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); ti.blur(); } });
-    tw.appendChild(ti);
 
-    var sw = document.createElement("div");
     var si = document.createElement("input");
     si.type = "text"; si.className = "c"; si.maxLength = 20; si.autocomplete = "off"; si.value = m.stock;
     si.addEventListener("input", function () { m.stock = si.value; save(); });
     si.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); si.blur(); } });
-    sw.appendChild(si);
 
-    miniBox.appendChild(no);
-    miniBox.appendChild(tw);
-    miniBox.appendChild(sw);
+    var di = dateInput(function () { return m.due; }, function (v) { m.due = v; }, function () { updateMini(row); });
+
+    var rem = document.createElement("div");
+    rem.className = "m-rem";
+    rem.onclick = function () { askMini(row); };
+
+    var body = document.createElement("div");
+    body.className = "m-body";
+    body.appendChild(wrapCell(ti)); body.appendChild(wrapCell(si)); body.appendChild(wrapCell(di)); body.appendChild(rem);
+
+    row._body = body; row._rem = rem; row._in = { t: ti, s: si, d: di };
+    row.appendChild(no); row.appendChild(body);
+    miniBox.appendChild(row);
+    updateMini(row);
+  });
+
+  // 点一下单元格 → 聚焦里面的输入框（这时才弹出键盘）
+  miniBox.addEventListener("click", function (e) {
+    var cell = e.target;
+    if (!cell || cell.tagName === "INPUT" || !cell.querySelector) return;
+    if (!cell.parentNode || !cell.parentNode.classList.contains("m-body")) return;
+    var inp = cell.querySelector("input");
+    if (inp) inp.focus();
+  });
+
+  // 长按任意一行（序号除外）上下拖动换顺序
+  enableDrag(miniBox, ".mrow", ".m-no", function (els) {
+    var order = els.map(function (el) { return el._m; });
+    if (order.some(function (m, i) { return m !== state.mini[i]; })) { state.mini = order; save(); }
   });
 
   // ===== 长按任意一行，上下拖动换顺序 =====
@@ -650,10 +829,11 @@ body.dragging * { user-select: none; -webkit-user-select: none; }
   showToday();
   updateCalc();
   updateAllRem();
+  updateMiniAll();
 
   // 跨天后自动刷新今日日期和剩余天数
   function checkDay() {
-    if (todayIso() !== lastToday) { showToday(); updateAllRem(); }
+    if (todayIso() !== lastToday) { showToday(); updateAllRem(); updateMiniAll(); }
   }
   setInterval(checkDay, 30000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden) checkDay(); });
