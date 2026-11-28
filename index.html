@@ -1193,54 +1193,138 @@ function copyToClipboard(text, btn) {
 
 </script>
 <script>
-/* ===== 导出 / 导入（两页数据一起，一段很短的文字）===== */
+/* ===== 导出 / 导入：两页都变成一段可读文字，粘贴回来自动填入 ===== */
 (function () {
-  var KEYS = ["tracker-v1", "stock-v1"], TAG = "DB1:";
-  function slim(v) {                       // 去掉空值，让文字更短
-    if (Array.isArray(v)) {
-      var a = v.map(slim);
-      while (a.length && isEmpty(a[a.length - 1])) a.pop();   // 去掉末尾的空行
-      return a;
-    }
-    if (v && typeof v === "object") {
-      var o = {};
-      Object.keys(v).forEach(function (k) {
-        if (k === "undo") return;
-        var s = slim(v[k]);
-        if (!isEmpty(s)) o[k] = s;
-      });
-      return o;
-    }
-    return v;
-  }
-  function isEmpty(v) {
-    if (v === "" || v === false || v === null || v === undefined) return true;
-    if (Array.isArray(v)) return v.every(isEmpty);
-    if (typeof v === "object") return Object.keys(v).length === 0;
-    return false;
-  }
+  var K1 = "tracker-v1", K2 = "stock-v1", SP = "　";
+  function load(k) { var d = null; try { d = JSON.parse(localStorage.getItem(k)); } catch (e) {} return (d && typeof d === "object") ? d : {}; }
+  function dn(s) { var p = s.split("-"); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000); }
+  function fmt(s) { var p = s.split("-"); return p[0] + "年" + (+p[1]) + "月" + (+p[2]) + "日"; }
+  function iso(y, m, d) { function z(n) { return (n < 10 ? "0" : "") + n; } return y + "-" + z(m) + "-" + z(d); }
+  function addDays(s, n) { var p = s.split("-"), d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)); return iso(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()); }
+  var now = new Date(), T = iso(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  function head() { return "今日日期：" + fmt(T) + SP + "星期" + "日一二三四五六".charAt(now.getDay()); }
+
+  // ---------- 导出 ----------
   function build() {
-    var o = {};
-    KEYS.forEach(function (k) {
-      var d = null; try { d = JSON.parse(localStorage.getItem(k)); } catch (e) {}
-      o[k] = d ? slim(d) : {};
+    var a = load(K1), b = load(K2), out1 = [head()];
+    var n = parseInt(a.calc && a.calc.days, 10);
+    if (a.calc && a.calc.base && !isNaN(n)) out1.push("日期计算：" + fmt(a.calc.base) + " 加 " + n + " 天 = " + fmt(addDays(a.calc.base, n)));
+    var main = [], mini = [];
+    (a.rows || []).forEach(function (r, i) {
+      if (!r || (!r.text && !r.from && !r.to)) return;
+      var p = [(i + 1) + ". " + (r.text || "")];
+      if (r.from) p.push("自 " + fmt(r.from));
+      if (r.to) p.push("至 " + fmt(r.to));
+      if (r.from && !r.hide) p.push("历时 " + (dn(T) - dn(r.from)) + " 天");
+      if (r.to) p.push("余 " + (dn(r.to) - dn(T)) + " 天");
+      main.push(p.join(SP));
     });
-    return TAG + JSON.stringify(o);
+    (a.mini || []).forEach(function (m, i) {
+      if (!m || (!m.text && !m.stock && !m.due)) return;
+      var p = [(i + 1) + ". " + (m.text || "")];
+      if (m.stock) p.push("库存 " + m.stock);
+      if (m.due) { p.push("限期 " + fmt(m.due)); p.push("余 " + (dn(m.due) - dn(T)) + " 天"); }
+      mini.push(p.join(SP));
+    });
+    if (main.length || mini.length) out1.push("");
+    if (main.length) out1 = out1.concat(main); else if (mini.length) out1.push("（空）");
+    if (mini.length) out1 = out1.concat([""], mini);
+    var out2 = [head(), ""];
+    (b.rows || []).forEach(function (r, i) {
+      if (!r || (!r.name && !r.stock && !r.use)) return;
+      var p = [(i + 1) + ". " + (r.name || "")];
+      if (r.stock) p.push("存量 " + r.stock);
+      if (r.use) p.push("日用量 " + r.use);
+      var s = parseFloat(r.stock), u = parseFloat(r.use);
+      if (!isNaN(s) && !isNaN(u) && u > 0) p.push("可供 " + Math.floor(s / u + 1e-9) + " 天");
+      out2.push(p.join(SP));
+    });
+    return out1.join("\n") + "\n\n" + out2.join("\n");
   }
+
+  // ---------- 导入 ----------
+  function pdate(s) {
+    var m = /(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/.exec(s || "");
+    return m ? iso(+m[1], +m[2], +m[3]) : "";
+  }
+  var KW = "自|至|历时|余|库存|限期|存量|日用量|可供";
+  var SPLIT = new RegExp("[\\s　]+(?=(?:" + KW + ")[\\s　]*[\\d])");
+  var FIELD = new RegExp("^(" + KW + ")[\\s　]*([\\s\\S]*)$");
+  function parseRow(line) {         // 返回 {i, name, f:{关键词: 值}}
+    line = line.replace(/〔[^〕]*〕\s*$/, "").trim();
+    var m = /^(\d+)\s*[.．、]\s*(.*)$/.exec(line);
+    if (!m) return null;
+    var parts = m[2].split(SPLIT), f = {};
+    for (var k = 1; k < parts.length; k++) { var q = FIELD.exec(parts[k].trim()); if (q) f[q[1]] = q[2].trim(); }
+    return { i: +m[1] - 1, name: parts[0].trim() === "（空）" ? "" : parts[0].trim(), f: f };
+  }
+  function numv(s) { var m = /^[\d.]+/.exec(s || ""); return m ? m[0] : ""; }
+  function parse(text) {
+    text = text.replace(/\r/g, "");
+    var blocks = [], cur = null;
+    text.split("\n").forEach(function (ln) {
+      if (/^\s*今日日期/.test(ln)) { cur = { lines: [] }; blocks.push(cur); }
+      else if (cur) cur.lines.push(ln);
+    });
+    if (!blocks.length) return null;
+    function isStock(b) { return b.lines.some(function (l) { return /(存量|日用量|可供)[\s　]*\d/.test(l); }); }
+    var A = null, B = null;
+    if (blocks.length >= 2) { A = blocks[0]; B = blocks[1]; }
+    else if (isStock(blocks[0])) B = blocks[0]; else A = blocks[0];
+    var res = {};
+    if (A) {
+      var calc = null, secs = [], sec = null;
+      A.lines.forEach(function (l) {
+        var cm = /日期计算[:：]\s*(\d{4}\s*年.*?日)\s*加\s*(-?\d+)\s*天/.exec(l);
+        if (cm) { calc = { base: pdate(cm[1]), days: cm[2] }; return; }
+        if (!l.trim()) { sec = null; return; }
+        if (/^\s*日期计算/.test(l)) return;
+        if (!sec) { sec = []; secs.push(sec); }
+        sec.push(l);
+      });
+      var rows = [], mini = [];
+      secs.forEach(function (s, si) {
+        s.forEach(function (l) {
+          var r = parseRow(l); if (!r) return;
+          var isMini = ("库存" in r.f) || ("限期" in r.f) || (!("自" in r.f) && !("至" in r.f) && !("历时" in r.f) && si >= 1);
+          if (isMini) { if (r.i >= 0 && r.i < 5) mini[r.i] = { text: r.name, stock: numv(r.f["库存"]), due: pdate(r.f["限期"]) }; }
+          else if (r.i >= 0 && r.i < 10) { var from = pdate(r.f["自"]); rows[r.i] = { text: r.name, from: from, to: pdate(r.f["至"]), hide: !!from && !("历时" in r.f) }; }
+        });
+      });
+      res.a = { rows: rows, mini: mini, calc: calc };
+    }
+    if (B) {
+      var rs = [];
+      B.lines.forEach(function (l) {
+        var r = parseRow(l); if (!r || r.i < 0 || r.i >= 15) return;
+        rs[r.i] = { name: r.name, stock: numv(r.f["存量"]), use: numv(r.f["日用量"]) };
+      });
+      res.b = { rows: rs };
+    }
+    return res;
+  }
+  function fill(arr, n, blank) { var o = []; for (var i = 0; i < n; i++) o.push(arr[i] || blank()); return o; }
   function flash(btn, msg) {
     if (btn._o === undefined) btn._o = btn.textContent;
     btn.textContent = msg; clearTimeout(btn._t);
     btn._t = setTimeout(function () { btn.textContent = btn._o; }, 1800);
   }
   function apply(text, btn) {
-    text = (text || "").trim();
-    var i = text.indexOf(TAG), o = null;
-    if (i >= 0) { try { o = JSON.parse(text.slice(i + TAG.length)); } catch (e) {} }
-    if (!o) { flash(btn, "内容无效"); alert("粘贴的内容不是导出的代码，请完整复制后再试。"); return; }
-    if (!confirm("导入会覆盖本设备上两页现有的全部内容，确定吗？")) return;
-    KEYS.forEach(function (k) {
-      if (o[k] && typeof o[k] === "object") { try { localStorage.setItem(k, JSON.stringify(o[k])); } catch (e) {} }
-    });
+    var res = null;
+    try { res = parse(text || ""); } catch (e) {}
+    if (!res) { flash(btn, "内容无效"); alert("粘贴的内容里没找到「今日日期」，请把导出的文字完整复制后再试。"); return; }
+    if (!confirm("导入会用这段文字覆盖本设备上" + (res.a && res.b ? "两页" : "对应那一页") + "的全部内容，确定吗？")) return;
+    if (res.a) {
+      var a = load(K1);
+      a.rows = fill(res.a.rows, 10, function () { return { text: "", from: "", to: "", hide: false }; });
+      a.mini = fill(res.a.mini, 5, function () { return { text: "", stock: "", due: "" }; });
+      if (res.a.calc && res.a.calc.base) a.calc = res.a.calc;
+      try { localStorage.setItem(K1, JSON.stringify(a)); } catch (e) {}
+    }
+    if (res.b) {
+      var b = { rows: fill(res.b.rows, 15, function () { return { name: "", stock: "", use: "" }; }), undo: null };
+      try { localStorage.setItem(K2, JSON.stringify(b)); } catch (e) {}
+    }
     flash(btn, "导入成功");
     setTimeout(function () { location.reload(); }, 400);
   }
@@ -1249,14 +1333,15 @@ function copyToClipboard(text, btn) {
   });
   [].forEach.call(document.querySelectorAll(".imbtn"), function (b) {
     b.onclick = function () {
-      function ask() { apply(prompt("请把导出的代码粘贴到这里："), b); }
+      function ask() { apply(prompt("请把导出的文字粘贴到这里："), b); }
       if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) {
         navigator.clipboard.readText().then(function (t) {
-          if (t && t.indexOf(TAG) >= 0) apply(t, b); else ask();
+          if (t && t.indexOf("今日日期") >= 0) apply(t, b); else ask();
         }, ask);
       } else ask();
     };
   });
+  window.__bk = { build: build, parse: parse };
 })();
 </script>
 <script>
